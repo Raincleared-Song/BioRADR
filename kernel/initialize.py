@@ -96,7 +96,7 @@ def init_models(args):
         model.load_state_dict(params['model'])
         if args.mode == 'train':
             trained_epoch = params['trained_epoch']
-            if config.optimizer == params['optimizer']:
+            if config.optimizer == params['optimizer_name']:
                 optimizer.load_state_dict(params['optimizer'])
             if 'global_step' in params:
                 global_step = params['global_step']

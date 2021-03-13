@@ -25,6 +25,7 @@ def save_model(path: str, model, optimizer, trained_epoch: int, global_step: int
         model = model.module
     ret = {
         'model': model.state_dict(),
+        'optimizer_name': config.optimizer,
         'optimizer': optimizer.state_dict(),
         'trained_epoch': trained_epoch,
         'global_step': global_step

@@ -1,20 +1,43 @@
+import random
+import numpy.random
 import torch
 import argparse
 import os
+import time
 from apex import amp
 from preprocess import task_to_process
 from datasets import task_to_dataset
-from config import task_to_config
+from config import task_to_config, ConfigBase
 from models import task_to_model
 from torch.utils.data import DataLoader
 
 
 def init_all():
+    init_seed()
     args = init_args()
+    save_config(args)
     init_rank_config(args)
     datasets = init_data(args)
     models = init_models(args)
     return task_to_config[args.task], models, datasets, args.task, args.mode
+
+
+def save_config(args):
+    config_list = os.listdir('config')
+    cur_config = task_to_config[args.task]
+    time_str = '-'.join(time.asctime(time.localtime(time.time())).split(' '))
+    base_path = os.path.join(cur_config.model_path, cur_config.model_name)
+    os.makedirs(base_path, exist_ok=True)
+    save_path = os.path.join(base_path, f'config_bak_{time_str}_{args.mode}')
+    fout = open(save_path, 'w', encoding='utf-8')
+    for f_name in config_list:
+        if f_name.endswith('.py'):
+            fout.write('------' + f_name + '------\n')
+            fin = open(os.path.join('config', f_name), 'r')
+            fout.write(fin.read())
+            fout.write('\n')
+            fin.close()
+    fout.close()
 
 
 def init_args():
@@ -34,10 +57,36 @@ def init_args():
     return arg_parser.parse_args()
 
 
+global_loader_generator = torch.Generator()
+
+
+def init_seed():
+    global global_loader_generator
+    seed = ConfigBase.seed
+    random.seed(seed)
+    numpy.random.seed(seed)
+    torch.random.manual_seed(seed)
+    torch.manual_seed(seed)
+    torch.cuda.manual_seed(seed)
+    torch.cuda.manual_seed_all(seed)
+    global_loader_generator.manual_seed(seed)
+    torch.backends.cudnn.deterministic = True
+    torch.backends.cudnn.benchmark = False
+    torch.set_deterministic(True)
+    os.environ['CUBLAS_WORKSPACE_CONFIG'] = ':16:8'
+
+
+def seed_worker(_):
+    worker_seed = torch.initial_seed() % 2**32
+    numpy.random.seed(worker_seed)
+    random.seed(worker_seed)
+
+
 def init_rank_config(args):
     config = task_to_config[args.task]
     if args.pretrain_bert is not None:
         config.bert_path = args.pretrain_bert
+        print(f'change pb to {config.bert_path}')
     if not (args.task == 'denoise' and args.mode == 'test'):
         return
     assert args.rank_file is not None
@@ -46,6 +95,7 @@ def init_rank_config(args):
 
 
 def init_dataset(task: str, mode: str):
+    global global_loader_generator
     dataset_type = task_to_dataset[task]
     config = task_to_config[task]
     process_func = task_to_process[task]
@@ -59,7 +109,9 @@ def init_dataset(task: str, mode: str):
         shuffle=True,
         num_workers=config.reader_num,
         collate_fn=collate_fn,
-        drop_last=(mode == 'train')
+        drop_last=(mode == 'train'),
+        worker_init_fn=seed_worker,
+        generator=global_loader_generator
     )
 
 
@@ -76,13 +128,14 @@ def init_data(args):
 
 
 def init_models(args):
+    config: ConfigBase = task_to_config[args.task]
+    torch.cuda.set_device(config.gpu_device)
     model = task_to_model[args.task]()
-    config = task_to_config[args.task]
     trained_epoch, global_step = -1, 0
     if config.use_gpu:
-        model = model.cuda()
-        os.environ["CUDA_VISIBLE_DEVICES"] = '0'
-        os.system("export CUDA_VISIBLE_DEVICES=0")
+        model = model.to(config.gpu_device)
+        os.environ["CUDA_VISIBLE_DEVICES"] = '0,1,2,3'
+        os.system("export CUDA_VISIBLE_DEVICES=0,1,2,3")
     optimizer = config.optimizer_dict[config.optimizer](
         model.parameters(), lr=config.learning_rate, weight_decay=config.weight_decay)
 
@@ -92,12 +145,12 @@ def init_models(args):
         if config.fp16:
             model, optimizer = amp.initialize(model, optimizer, opt_level='O2')
     else:
-        params = torch.load(args.checkpoint)
+        params = torch.load(args.checkpoint, map_location={f'cuda:{k}': config.gpu_device for k in range(8)})
         model.load_state_dict(params['model'])
         if args.mode == 'train':
             trained_epoch = params['trained_epoch']
-            if config.optimizer == params['optimizer_name']:
-                optimizer.load_state_dict(params['optimizer'])
+            # if config.optimizer == params['optimizer_name']:
+            #     optimizer.load_state_dict(params['optimizer'])
             if 'global_step' in params:
                 global_step = params['global_step']
 

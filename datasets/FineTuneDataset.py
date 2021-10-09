@@ -11,6 +11,8 @@ class FineTuneDataset(Dataset):
         if mode == 'train' or task != 'finetune' and mode == 'valid':
             # abandon those data without labels
             self.data = [item for item in self.data if len(item['labels']) != 0]
+            if task == 'denoise' and 'chemprot' in config.data_path[mode].lower():
+                self.data = [item for item in self.data if self.test_cp_negative(item)]
             random.shuffle(self.data)
         if mode == 'train' and task == 'finetune' and config.use_loss_weight:
             stat = load_json(config.stat_path)[config.use_stat]
@@ -29,3 +31,13 @@ class FineTuneDataset(Dataset):
 
     def __len__(self):
         return len(self.data)
+
+    @staticmethod
+    def test_cp_negative(item: dict):
+        num_c, num_g = 0, 0
+        for entity in item['vertexSet']:
+            if entity[0]['type'].lower().startswith('chemical'):
+                num_c += 1
+            else:
+                num_g += 1
+        return num_c * num_g > len(item['labels'])

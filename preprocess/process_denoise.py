@@ -3,7 +3,12 @@ import torch
 from config import ConfigDenoise as Config
 
 
+use_cp: bool = False
+
+
 def process_denoise(data, mode: str):
+    global use_cp
+    use_cp = 'chemprot' in Config.data_path[mode].lower()
     documents, attn_masks, word_positions, head_ids, tail_ids, pos_ids, titles = [], [], [], [], [], [], []
     for doc in data:
         document, attn_mask, position = process_document(doc, mode)
@@ -14,8 +19,19 @@ def process_denoise(data, mode: str):
         if mode == 'test':
             entity_pad = Config.entity_padding[mode]
             entity_num = len(doc['vertexSet'])
-            pairs = [(i, j) for i in range(entity_num) for j in range(entity_num) if i != j]
-            pairs += [(0, 0)] * (entity_pad * (entity_pad - 1) - len(pairs))
+            if use_cp:
+                pairs = []
+                entities = doc['vertexSet']
+                for i in range(entity_num):
+                    for j in range(entity_num):
+                        if entities[i][0]['type'].lower().startswith('chemical') and \
+                                entities[j][0]['type'].lower().startswith('gene'):
+                            pairs.append((i, j))
+                assert len(pairs) <= Config.test_sample_limit
+                pairs += [(0, 0)] * (Config.test_sample_limit - len(pairs))
+            else:
+                pairs = [(i, j) for i in range(entity_num) for j in range(entity_num) if i != j]
+                pairs += [(0, 0)] * (entity_pad * (entity_pad - 1) - len(pairs))
             head_ids.append([pair[0] for pair in pairs])
             tail_ids.append([pair[1] for pair in pairs])
             titles.append(doc['title'])
@@ -96,8 +112,25 @@ def process_document(data, mode: str):
 def process_rank(data):
     entity_num = len(data['vertexSet'])
     positive_pairs = set([(lab['h'], lab['t']) for lab in data['labels']])
-    negative_pairs = [(i, j) for i in range(entity_num) for j in range(entity_num) if i != j
-                      and (i, j) not in positive_pairs]
+    global use_cp
+    if use_cp:
+        negative_pairs = []
+        entities = data['vertexSet']
+        for i in range(entity_num):
+            for j in range(entity_num):
+                if entities[i][0]['type'].lower().startswith('chemical') and \
+                        entities[j][0]['type'].lower().startswith('gene') and (i, j) not in positive_pairs:
+                    negative_pairs.append((i, j))
+    else:
+        negative_pairs = [(i, j) for i in range(entity_num) for j in range(entity_num) if i != j
+                          and (i, j) not in positive_pairs]
+    try:
+        assert len(negative_pairs) > 0
+    except AssertionError as err:
+        print(positive_pairs)
+        entities = data['vertexSet']
+        print([item[0]['type'] for item in entities])
+        raise err
     while len(negative_pairs) < Config.negative_num:
         negative_pairs *= 2
     positive_pairs = list(positive_pairs)

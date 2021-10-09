@@ -32,18 +32,26 @@ if __name__ == '__main__':
     arg_parser = argparse.ArgumentParser()
     arg_parser.add_argument('-r', '--result_file', type=str, required=True, help='the result file path')
     arg_parser.add_argument('-o', '--output_file', type=str, required=True, help='the output file path')
+    arg_parser.add_argument('-d', '--dev_as_test', action='store_true')
     args = arg_parser.parse_args()
     input_filename = args.result_file
     output_filename = args.output_file
 
-    pretrain_path = 'CTDRED/pretrain_mixed.json'
-    train_path = 'CTDRED/train_mixed.json'
-    dev_path = 'CTDRED/dev.json'
-    test_path = 'CTDRED/test.json'
+    # pretrain_path = 'CTDRED/pretrain_mixed.json'
+    # train_path = 'CTDRED/train_mixed.json'
+    # dev_path = 'CTDRED/dev.json'
+    # test_path = 'CTDRED/dev.json' if args.dev_as_test else 'CTDRED/test.json'
+    # train_path = 'CTDRED/cdr_train.json'
+    # dev_path = 'CTDRED/cdr_dev.json'
+    # test_path = 'CTDRED/cdr_dev.json' if args.dev_as_test else 'CTDRED/cdr_test.json'
+    train_path = 'Chemprot/chemprot_train_sent_fr.json'
+    dev_path = 'Chemprot/chemprot_dev_sent_fr.json'
+    test_path = 'Chemprot/chemprot_dev_sent_fr.json' if args.dev_as_test else 'Chemprot/chemprot_test_sent_fr.json'
     to_test = test_path
 
     fact_in_train_annotated = gen_train_facts(train_path)
-    fact_in_train_distant = gen_train_facts(pretrain_path)
+    # fact_in_train_distant = gen_train_facts(pretrain_path)
+    fact_in_train_distant = set()
 
     output_file = open(output_filename, 'w')
     truth = json.load(open(to_test))

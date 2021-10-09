@@ -1,18 +1,20 @@
 from config import ConfigFineTune as Config
-from utils import load_json
+from utils import load_json, sigmoid
 import numpy as np
 import random
 import os
 import torch
 
 
+use_cp: bool = False
 use_score = Config.score_path is not None and os.path.exists(Config.score_path['train']) \
     and os.path.exists(Config.score_path['valid']) and os.path.exists(Config.score_path['test'])
+# use_score = False
 if use_score:
     mode_to_scores = {
-        'train': np.load(Config.score_path['train']),
-        'valid': np.load(Config.score_path['valid']),
-        'test': np.load(Config.score_path['test'])
+        'train': sigmoid(np.load(Config.score_path['train'])),
+        'valid': sigmoid(np.load(Config.score_path['valid'])),
+        'test': sigmoid(np.load(Config.score_path['test']))
     }
     title_list = {
         'train': load_json(Config.title_path['train']),
@@ -27,6 +29,8 @@ if use_score:
 
 
 def process_finetune(data, mode: str):
+    global use_cp
+    use_cp = 'chemprot' in Config.data_path[mode].lower()
     documents, labels, head_poses, tail_poses, label_masks, attn_masks, pairs_list, titles, types = \
         [], [], [], [], [], [], [], [doc['title'] for doc in data], []
     for doc in data:
@@ -54,8 +58,11 @@ def process_finetune(data, mode: str):
     }
 
 
-def process_single(data, mode: str):
-    global mode_to_scores, mode_to_titles, use_score
+def process_single(data, mode: str, extra=None):
+    global mode_to_scores, mode_to_titles, use_score, use_cp
+    if extra is not None:
+        use_score = extra
+    use_cp = 'chemprot' in Config.data_path[mode].lower()
     entities = data['vertexSet']
     entity_num = len(entities)
     sentences = [[Config.tokenizer.tokenize(word) for word in sent] for sent in data['sents']]
@@ -69,13 +76,23 @@ def process_single(data, mode: str):
             for j in range(entity_num):
                 if i == j:
                     continue
+                if use_cp and not (entities[i][0]['type'].lower().startswith('chemical') and
+                                   entities[j][0]['type'].lower().startswith('gene')):
+                    continue
                 pair_scores.append(((i, j), scores[len(pair_scores)]))
         pair_scores.sort(reverse=True, key=lambda x: x[1])
 
-        reserve_num = min(entity_num << 1, Config.kept_pair_num)
+        if Config.score_threshold is None:
+            reserve_num = min(entity_num << 1, Config.kept_pair_num)
+            if use_cp:
+                reserve_num = min(reserve_num, entity_num)
+            # reserve pairs with highest score
+            reserved_pairs = pair_scores[:reserve_num]
+        else:
+            threshold = Config.score_threshold if mode == 'train' else Config.test_score_threshold
+            reserved_pairs = [item for item in pair_scores if item[1] > threshold]
+            reserved_pairs = reserved_pairs[:Config.score_sample_limit]
         entity_set = set()
-        # reserve pairs with highest score
-        reserved_pairs = pair_scores[:reserve_num]
         for pair in reserved_pairs:
             entity_set.add(pair[0][0])
             entity_set.add(pair[0][1])
@@ -133,8 +150,16 @@ def process_single(data, mode: str):
             positive_pairs.add((lab['h'], lab['t']))
             label_mat[lab['h'], lab['t'], Config.label2id[lab['r']]] = 1
             label_mat[lab['h'], lab['t'], Config.label2id['NA']] = 0
-    negative_pairs = [(i, j) for i in range(entity_num) for j in range(entity_num) if i != j
-                      and (i, j) not in positive_pairs]
+    if use_cp:
+        negative_pairs = []
+        for i in range(entity_num):
+            for j in range(entity_num):
+                if entities[i][0]['type'].lower().startswith('chemical') and \
+                        entities[j][0]['type'].lower().startswith('gene') and (i, j) not in positive_pairs:
+                    negative_pairs.append((i, j))
+    else:
+        negative_pairs = [(i, j) for i in range(entity_num) for j in range(entity_num) if i != j
+                          and (i, j) not in positive_pairs]
 
     head_pos, tail_pos, labels, pair_ids, types = [], [], [], [], []
 
@@ -156,9 +181,9 @@ def process_single(data, mode: str):
         tail_pos.append(positions[pair[1]])
         labels.append(label_mat[pair[0], pair[1]])  # [[97], [97]]
 
-        if Config.use_entity_type:
-            types.append((entities[pair[0]][0]['type'], entities[pair[1]][0]['type']))
+        types.append((entities[pair[0]][0]['type'], entities[pair[1]][0]['type']))
 
+    assert len(labels) <= sample_limit
     # pad labels to sample_limit
     label_mask = [1] * len(labels) + [0] * (sample_limit - len(labels))
     labels += [np.zeros(Config.relation_num)] * (sample_limit - len(labels))

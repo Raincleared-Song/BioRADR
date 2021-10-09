@@ -46,7 +46,7 @@ def gen_score(config: ConfigBase, model, dataset, path: str):
     for step, data in enumerate(dataset):
         for key, value in data.items():
             if isinstance(value, torch.Tensor):
-                data[key] = Variable(value.cuda()) if use_gpu else Variable(value)
+                data[key] = Variable(value.to(config.gpu_device)) if use_gpu else Variable(value)
 
         result = model(data, 'test', eval_res)
         scores += result['score'].cpu().tolist()

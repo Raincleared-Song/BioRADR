@@ -1,6 +1,6 @@
 from torch.utils.data import Dataset
 from config import ConfigPretrain as Config
-from utils import load_json
+from utils import load_json, sigmoid
 import numpy as np
 import random
 
@@ -47,35 +47,51 @@ class PretrainDataset(Dataset):
 
 
 def load_pretrain_data(mode: str):
-    # use score
-    scores = np.load(Config.score_path[mode])
-    titles = load_json(Config.title_path[mode])
-    title_to_id = {titles[i]: i for i in range(len(titles))}
     data = load_json(Config.data_path[mode])
     positive_pairs = set()
-    for did, doc in enumerate(data):
-        entities = doc['vertexSet']
-        entity_num = len(entities)
-        # abandon those documents with less than 5 entities
-        if entity_num < 5:
-            continue
-        score = scores[title_to_id[doc['title']]]
-        pair_to_score = []
-        for i in range(entity_num):
-            for j in range(entity_num):
-                if i == j:
-                    continue
-                pair_to_score.append(((i, j), score[len(pair_to_score)]))
-        pair_to_score.sort(key=lambda x: x[1], reverse=True)
-        # reserve highest 30 pairs
-        reserved_pairs = set([item[0] for item in pair_to_score[:Config.kept_pair_num]])
 
-        for lid, lab in enumerate(doc['labels']):
-            if (lab['h'], lab['t']) in reserved_pairs:
+    if Config.use_score:
+        scores = sigmoid(np.load(Config.score_path[mode]))
+        titles = load_json(Config.title_path[mode])
+        title_to_id = {titles[i]: i for i in range(len(titles))}
+        for did, doc in enumerate(data):
+            entities = doc['vertexSet']
+            entity_num = len(entities)
+            # abandon those documents with less than 5 entities
+            if entity_num < 5:
+                continue
+            score = scores[title_to_id[doc['title']]]
+            pair_to_score = []
+            for i in range(entity_num):
+                for j in range(entity_num):
+                    if i == j:
+                        continue
+                    pair_to_score.append(((i, j), score[len(pair_to_score)]))
+            pair_to_score.sort(key=lambda x: x[1], reverse=True)
+
+            if Config.score_threshold is None:
+                # reserve highest 30 pairs
+                reserved_pairs = set([item[0] for item in pair_to_score[:Config.kept_pair_num]])
+            else:
+                # reserve pairs with high score
+                reserved_pairs = set([item[0] for item in pair_to_score if item[1] > Config.score_threshold])
+
+            for lid, lab in enumerate(doc['labels']):
+                if (lab['h'], lab['t']) in reserved_pairs:
+                    positive_pairs.add((did, lab['h'], lab['t']))
+                    data[did]['labels'][lid]['exist'] = True
+                else:
+                    data[did]['labels'][lid]['exist'] = False
+    else:
+        for did, doc in enumerate(data):
+            entities = doc['vertexSet']
+            entity_num = len(entities)
+            # abandon those documents with less than 5 entities
+            if entity_num < 5:
+                continue
+            for lid, lab in enumerate(doc['labels']):
                 positive_pairs.add((did, lab['h'], lab['t']))
                 data[did]['labels'][lid]['exist'] = True
-            else:
-                data[did]['labels'][lid]['exist'] = False
 
     pair_dict = load_json(Config.pair2triple_path)  # Dict: 'ent&ent -> List[(did, h, t)]'
 

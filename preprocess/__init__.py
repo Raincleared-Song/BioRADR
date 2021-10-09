@@ -1,4 +1,4 @@
-from .process_finetune import process_finetune
+from .process_finetune import process_finetune, process_single
 from .process_denoise import process_denoise
 from .process_pretrain import process_pretrain
 

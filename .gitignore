@@ -5,15 +5,20 @@ CTDRED/
 data/
 DocRED/
 stats/
+pretrain_models/
+Chemprot/
 
 collect.py
 download.py
 process.py
 process_ctdred.py
 test.py
+fake*.py
 
 rank.sh
 test*.txt
 test*.log
+test*.json
 problem*.txt
 problem*.log
+test_cps_score.py

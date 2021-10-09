@@ -38,6 +38,7 @@ class ConfigPretrain(ConfigBase):
 
     do_validation = True
     use_gpu = True
+    gpu_device = 'cuda:0'
     hidden_size = 256
 
     optimizer = 'adamw'
@@ -48,13 +49,15 @@ class ConfigPretrain(ConfigBase):
     output_step = 1
     test_step = 1
     model_path = 'checkpoint'
-    model_name = 'pretrain'
+    model_name = 'pretrain_t0_all'
     fp16 = True
     lr_step_size = 1
     lr_gamma = 1
     train_steps = 8
     output_metric = 'binary_metric'
     kept_pair_num = 20
+    use_score = True
+    score_threshold = 0.7
 
     positive_num = 5
     negative_num = 8

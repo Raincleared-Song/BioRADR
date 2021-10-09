@@ -10,30 +10,47 @@ class ConfigBase:
         train     24          41
         dev       25          33
         test      42          40
+        cdr_train 14          21
+        cdr_dev   16          20
+        cdr_test  21          22
+        cp_train  59          85     1716
+        cp_dev    48          80     1584
+        cp_test   54          113    2886
+        cps_train 40          27     144
+        cps_dev   32          27     162
+        cps_test  30          22     99
     """
     # dmis-lab/biobert-base-cased-v1.1
-    # allenai/scibert_scivocab_uncased
     tokenizer = AutoTokenizer.from_pretrained('dmis-lab/biobert-base-cased-v1.1')
-    relation_num = 15  # contain NA
+    relation_num = 15  # CTDRED
+    # relation_num = 2  # cdr
+    # relation_num = 24  # Chemprot
     bert_hidden = 768
-    valid_instance_cnt = 14568
+    valid_instance_cnt = 14568  # CTDRED
+    # valid_instance_cnt = 1012  # cdr
+    # valid_instance_cnt = 3466  # Chemprot_fr
     optimizer_dict = {
         'adam': Adam,
         'adamw': AdamW,
         'sgd': SGD
     }
-    rank_result_path = 'CTDRED/rank_result'
-    pair2triple_path = 'CTDRED/pair2triple.json'
-
-    stat_path = 'CTDRED/stat.json'
+    rank_result_path = 'CTDRED/rank_result'  # CTDRED
+    # rank_result_path = 'Chemprot/rank_result_fr'  # Chemprot sent
+    pair2triple_path = 'CTDRED/pair2triple.json'  # CTDRED
 
     __file = open('CTDRED/relation_to_id.json')
+    # __file = open('CTDRED/relation_to_id_cdr.json')
+    # __file = open('Chemprot/chemprot_relation_to_id.json')
     label2id = json.load(__file)
     __file.close()
 
     __file = open('CTDRED/id_to_relation.json')
+    # __file = open('CTDRED/id_to_relation_cdr.json')
+    # __file = open('Chemprot/chemprot_id_to_relation.json')
     id2label = json.load(__file)
     __file.close()
+
+    seed = 90
 
     label2id: dict
     id2label: list
@@ -54,6 +71,7 @@ class ConfigBase:
 
     do_validation: bool
     use_gpu: bool
+    gpu_device: str
     fp16: bool
 
     optimizer: str

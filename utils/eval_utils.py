@@ -78,8 +78,17 @@ def f1_auc_metric(eval_res: dict, mode: str):
             auc_x.append(float(correct) / eval_res['predict_num'])
         auc_x = np.asarray(auc_x, dtype='float32')
         auc_y = np.asarray(auc_y, dtype='float32')
-        auc = metrics.auc(x=auc_x, y=auc_y)
-        result['auc'] = round(auc, 4)
+        try:
+            if len(auc_x) > 1:
+                auc = metrics.auc(x=auc_x, y=auc_y)
+                result['auc'] = round(auc, 4)
+            else:
+                result['auc'] = 0.0
+        except ValueError as err:
+            print(auc_x.shape, auc_y.shape)
+            del eval_res['auc_item']
+            print(eval_res)
+            raise err
     ret = {
         'result': result,
         'stat': {

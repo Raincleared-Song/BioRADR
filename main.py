@@ -1,6 +1,7 @@
 import os
 import shutil
 import torch
+from config import ConfigFineTune as Config
 from kernel import init_all, train, test, rank
 
 
@@ -20,8 +21,8 @@ def inspect(task_: str, mode_='valid'):
             tokens = [token for token in lines[-1].split(' ') if len(token) > 0]
             result[int(file_name[:-4])] = float(tokens[5])
         else:
-            find_key = '"f1":' if task_.startswith('finetune') else (
-                '"RD": ' if task_.startswith('denoise') else '"MEM":')
+            find_key = '"f1":' if 'finetune' in task_ else (
+                '"RD": ' if 'denoise' in task_ else '"RD":')
             pos = lines[-1].find(find_key) + len(find_key) + 1
             end = pos
             while lines[-1][end] not in (',', '}'):
@@ -46,6 +47,27 @@ def inspect(task_: str, mode_='valid'):
 
 
 if __name__ == '__main__':
+    # repeated experiments for cdr5
+    is_cdr = 'cdr' in Config.data_path['train'] and not Config.use_extra
+    if is_cdr:
+        task_path = Config.model_name
+
+        seeds = list(range(90, 100))
+        model_path = f'checkpoint/{task_path}/model'
+        target_path = f'checkpoint/{task_path}/model_all'
+        os.makedirs(target_path, exist_ok=True)
+        for it in range(5):
+            print(f'epoch {it} for {task_path} ......')
+            config, models, datasets, task, mode = init_all(seeds[it])
+            train(config, models, datasets, it)
+            # os.system(f'python fake.py test{it}')
+
+            m_key, m_value = inspect(task_path, f'valid{it}')
+            print(f'{model_path}/{m_key}.pkl', f'{target_path}/{it}-{m_key}.pkl')
+            shutil.copy(f'{model_path}/{m_key}.pkl', f'{target_path}/{it}-{m_key}.pkl')
+        exit()
+
+    # normal setting
     config, models, datasets, task, mode = init_all()
     if mode == 'train':
         train(config, models, datasets)

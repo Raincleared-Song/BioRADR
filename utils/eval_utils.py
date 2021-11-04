@@ -15,7 +15,7 @@ def eval_multi_label(predict_out, labels, label_mask, eval_res: dict = None):
         }
     assert len(labels[0]) == len(predict_out[0])
     score_list, predict_label = torch.max(predict_out, dim=1)
-    na_id = ConfigBase.relation_num - 1
+    na_id = ConfigBase.label2id['NA']
     for i in range(len(predict_label)):
         if int(label_mask[i]) == 0:  # null label
             continue
@@ -105,5 +105,6 @@ def binary_metric(eval_res: dict, mode: str):
     for key in eval_res.keys():
         ret[key] = 0
         if eval_res[key]['instance_num'] != 0:
-            ret[key] = round(eval_res[key]['correct_num'] / eval_res[key]['instance_num'], 4)
+            acc = round(eval_res[key]['correct_num'] / eval_res[key]['instance_num'], 4)
+            ret[key] = (acc, eval_res[key]['instance_num'], eval_res[key]['correct_num'])
     return json.dumps(ret)

@@ -3,7 +3,7 @@ import subprocess
 
 
 if __name__ == '__main__':
-    use_cp = True
+    use_cp = False
     if use_cp:
         out_file = open('test_cps_log.txt', 'a', encoding='utf-8')
         out_train = open('test_cps_train_log.txt', 'a', encoding='utf-8')
@@ -44,12 +44,42 @@ if __name__ == '__main__':
         # ('test_ctd_finetune_t099905_lr02', 8, 2e-5, 0.999, 0.5),
         # ('test_ctd_finetune_t0999905_lr02', 19, 2e-5, 0.9999, 0.5),
         # ('test_ctd_finetune_t09999905_lr02', 1, 2e-5, 0.99999, 0.5),
-        ('test_cps_finetune_t0505_lr01', 28, 1e-5, 0.5, 0.5),
-        ('test_cps_finetune_t0505_lr02', 30, 2e-5, 0.5, 0.5),
-        ('test_cps_finetune_t0505_lr03', 20, 3e-5, 0.5, 0.5),
+        # ('test_cps_finetune_t0505_lr01', 28, 1e-5, 0.5, 0.5),
+        # ('test_cps_finetune_t0505_lr02', 30, 2e-5, 0.5, 0.5),
+        # ('test_cps_finetune_t0505_lr03', 20, 3e-5, 0.5, 0.5),
         # ('test_cps_finetune_t0505_lr04', 9, 4e-5, 0.5, 0.5),
         # ('test_cps_finetune_t0505_lr05', 2, 5e-5, 0.5, 0.5),
         # ('test_cps_finetune_t0505_lr10', 1, 1e-4, 0.5, 0.5),
+        # ('test_ctd_finetune_lr02_tn_wp_all', 57, 2e-5, None, None),
+        # ('test_ctd_finetune_lr02_tn_wp_m1', 41, 2e-5, None, None),
+        # ('test_ctd_finetune_lr02_tn_wp_m2', 57, 2e-5, None, None),
+        # ('test_ctd_finetune_lr02_tn_wp_m3', 46, 2e-5, None, None),
+        # ('test_ctd_finetune_tn_lr02_wp_all', 47, 2e-5, None, None),
+        # ('test_ctd_finetune_tn_lr02_wp_m1', 55, 2e-5, None, None),
+        # ('test_ctd_finetune_tn_lr02_wp_m2', 41, 2e-5, None, None),
+        # ('test_ctd_finetune_tn_lr02_wp_m3', 41, 2e-5, None, None),
+        # ('test_ctd_finetune_lr02_tn_rep', 54, 2e-5, None, None),
+        # ('test_ctd_finetune_lr02_tn_rep95', 53, 2e-5, None, None),
+        # ('test_ctd_finetune_lr02_tn_rep100', 48, 2e-5, None, None),
+        # ('test_ctd_finetune_t0705_lr02_rep90', 37, 2e-5, 0.7, 0.99999),
+        # ('test_ctd_finetune_t0705_lr02_rep95', 15, 2e-5, 0.7, 0.99999),
+        # ('test_ctd_finetune_t0705_lr02_rep100', 58, 2e-5, 0.7, 0.99999),
+        # ('test_ctd_finetune_tn_lr02_wp_all_s95', 49, 2e-5, None, None),
+        # ('test_ctd_finetune_tn_lr02_wp_m1_s95', 36, 2e-5, None, None),
+        # ('test_ctd_finetune_tn_lr02_wp_m2_s95', 49, 2e-5, None, None),
+        # ('test_ctd_finetune_tn_lr02_wp_m3_s95', 59, 2e-5, None, None),
+        # ('test_ctd_finetune_lr02_tn_wp_all_rep95', 48, 2e-5, None, None),
+        # ('test_ctd_finetune_lr02_tn_wp_m1_rep95', 48, 2e-5, None, None),
+        # ('test_ctd_finetune_lr02_tn_wp_m2_rep95', 53, 2e-5, None, None),
+        # ('test_ctd_finetune_lr02_tn_wp_m3_rep95', 56, 2e-5, None, None),
+        # ('test_ctd_finetune_tn_lr02_wp_all_s100', 57, 2e-5, None, None),
+        # ('test_ctd_finetune_tn_lr02_wp_m1_s100', 50, 2e-5, None, None),
+        # ('test_ctd_finetune_tn_lr02_wp_m2_s100', 55, 2e-5, None, None),
+        # ('test_ctd_finetune_tn_lr02_wp_m3_s100', 52, 2e-5, None, None),
+        ('test_ctd_finetune_lr02_tn_wp_all_rep100', 56, 2e-5, None, None),
+        ('test_ctd_finetune_lr02_tn_wp_m1_rep100', 50, 2e-5, None, None),
+        ('test_ctd_finetune_lr02_tn_wp_m2_rep100', 12, 2e-5, None, None),
+        ('test_ctd_finetune_lr02_tn_wp_m3_rep100', 43, 2e-5, None, None),
     ]
     for name, epoch, lr, st, tst in test_list:
         print('------', name, epoch, lr, st, tst, '------')

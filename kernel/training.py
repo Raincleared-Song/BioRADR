@@ -6,7 +6,7 @@ from timeit import default_timer as timer
 from apex import amp
 from .testing import test
 from config import ConfigBase
-from torch.optim import lr_scheduler
+from transformers import get_linear_schedule_with_warmup
 from utils import name_to_metric, print_value, time_to_str, save_model, time_tag
 
 
@@ -23,6 +23,11 @@ def train(config: ConfigBase, models, datasets, it=None):
     test_step = config.test_step
     use_gpu = config.use_gpu
 
+    total_steps = int(len(train_set) * config.epoch_num // config.train_steps)
+    warmup_steps = int(total_steps * config.warmup_ratio)
+    scheduler = get_linear_schedule_with_warmup(optimizer, num_warmup_steps=warmup_steps,
+                                                num_training_steps=total_steps)
+
     os.makedirs(config.model_path, exist_ok=True)
     task_path = os.path.join(config.model_path, config.model_name)
     os.makedirs(task_path, exist_ok=True)
@@ -35,10 +40,10 @@ def train(config: ConfigBase, models, datasets, it=None):
         valid_output_path = os.path.join(task_path, 'valid' + ('' if it is None else str(it)))
         os.makedirs(valid_output_path, exist_ok=True)
 
-    lr_step_size = config.lr_step_size
-    gamma = config.lr_gamma
-    exp_lr_scheduler = lr_scheduler.StepLR(optimizer, step_size=lr_step_size, gamma=gamma)
-    exp_lr_scheduler.step(trained_epoch + 1)
+    # lr_step_size = config.lr_step_size
+    # gamma = config.lr_gamma
+    # exp_lr_scheduler = lr_scheduler.StepLR(optimizer, step_size=lr_step_size, gamma=gamma)
+    # exp_lr_scheduler.step(trained_epoch + 1)
 
     print(f'start training from epoch {trained_epoch + 1} to {total_epoch} ......')
 
@@ -59,7 +64,7 @@ def train(config: ConfigBase, models, datasets, it=None):
     for epoch in range(trained_epoch + 1, total_epoch):
         # for each epoch
         start_time = timer()
-        exp_lr_scheduler.step(epoch)
+        # exp_lr_scheduler.step(epoch)
 
         eval_res = None
         total_loss = 0
@@ -90,7 +95,9 @@ def train(config: ConfigBase, models, datasets, it=None):
                 with amp.scale_loss(loss, optimizer) as scaled_loss:
                     scaled_loss.backward()
             else:
+                torch.set_deterministic(False)
                 loss.backward()
+                torch.set_deterministic(True)
             time_tag(13, True)
 
             if step % train_steps == 0:
@@ -100,6 +107,7 @@ def train(config: ConfigBase, models, datasets, it=None):
                     clip_grad_norm_(model.parameters(), 1.0)
                 optimizer.step()
                 optimizer.zero_grad()
+                scheduler.step()
                 time_tag(14, True)
 
             if step % output_step == 0:

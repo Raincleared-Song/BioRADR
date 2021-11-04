@@ -12,8 +12,8 @@ from models import task_to_model
 from torch.utils.data import DataLoader
 
 
-def init_all():
-    init_seed()
+def init_all(seed=None):
+    init_seed(seed)
     args = init_args()
     save_config(args)
     init_rank_config(args)
@@ -30,6 +30,8 @@ def save_config(args):
     os.makedirs(base_path, exist_ok=True)
     save_path = os.path.join(base_path, f'config_bak_{time_str}_{args.mode}')
     fout = open(save_path, 'w', encoding='utf-8')
+    if args.pretrain_bert is not None:
+        fout.write(f'change pb to {args.pretrain_bert}\n\n')
     for f_name in config_list:
         if f_name.endswith('.py'):
             fout.write('------' + f_name + '------\n')
@@ -60,9 +62,10 @@ def init_args():
 global_loader_generator = torch.Generator()
 
 
-def init_seed():
+def init_seed(seed):
     global global_loader_generator
-    seed = ConfigBase.seed
+    if seed is None:
+        seed = ConfigBase.seed
     random.seed(seed)
     numpy.random.seed(seed)
     torch.random.manual_seed(seed)
@@ -96,7 +99,10 @@ def init_rank_config(args):
 
 def init_dataset(task: str, mode: str):
     global global_loader_generator
-    dataset_type = task_to_dataset[task]
+    dataset_key = task
+    if task == 'denoise':
+        dataset_key += '_' + ('train' if mode != 'test' else 'test')
+    dataset_type = task_to_dataset[dataset_key]
     config = task_to_config[task]
     process_func = task_to_process[task]
 
@@ -137,7 +143,7 @@ def init_models(args):
         os.environ["CUDA_VISIBLE_DEVICES"] = '0,1,2,3'
         os.system("export CUDA_VISIBLE_DEVICES=0,1,2,3")
     optimizer = config.optimizer_dict[config.optimizer](
-        model.parameters(), lr=config.learning_rate, weight_decay=config.weight_decay)
+        model.parameters(), lr=config.learning_rate, weight_decay=config.weight_decay, eps=config.adam_epsilon)
 
     if args.checkpoint is None:
         if args.mode == 'test':

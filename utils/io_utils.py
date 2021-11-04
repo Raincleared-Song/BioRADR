@@ -1,4 +1,5 @@
 import json
+import numpy as np
 import torch
 import sys
 from config import ConfigBase
@@ -66,3 +67,13 @@ def time_to_str(time):
     minute = time // 60
     second = time % 60
     return '%2d:%02d' % (minute, second)
+
+
+def calculate_bound(x):
+    if x[0] < 1:
+        x = np.array(x) * 100
+    return f'{np.round(np.mean(x), 2)}±{np.round(np.std(x), 2)}'
+
+
+def print_json(obj):
+    print(json.dumps(obj, sort_keys=True, indent=4, separators=(', ', ': '), ensure_ascii=False))

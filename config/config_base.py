@@ -1,6 +1,7 @@
 import json
 from transformers import AutoTokenizer
-from torch.optim import Adam, AdamW, SGD
+from torch.optim import Adam, SGD
+from transformers.optimization import AdamW
 
 
 class ConfigBase:
@@ -20,37 +21,42 @@ class ConfigBase:
         cps_dev   32          27     162
         cps_test  30          22     99
     """
-    # dmis-lab/biobert-base-cased-v1.1
-    tokenizer = AutoTokenizer.from_pretrained('dmis-lab/biobert-base-cased-v1.1')
-    relation_num = 15  # CTDRED
-    # relation_num = 2  # cdr
+    # tokenizer = AutoTokenizer.from_pretrained('dmis-lab/biobert-base-cased-v1.1')
+    tokenizer = AutoTokenizer.from_pretrained('allenai/scibert_scivocab_cased')
+    # tokenizer = AutoTokenizer.from_pretrained('allenai/scibert_scivocab_uncased')
+    # relation_num = 15  # CTDRED
+    relation_num = 2  # cdr
     # relation_num = 24  # Chemprot
     bert_hidden = 768
-    valid_instance_cnt = 14568  # CTDRED
-    # valid_instance_cnt = 1012  # cdr
+    # valid_instance_cnt = 14568  # CTDRED
+    # valid_instance_cnt = 997  # cdr
+    # valid_instance_cnt = 8598  # CTD_binary
+    valid_instance_cnt = 7992  # CTD_binary2
     # valid_instance_cnt = 3466  # Chemprot_fr
     optimizer_dict = {
         'adam': Adam,
         'adamw': AdamW,
         'sgd': SGD
     }
-    rank_result_path = 'CTDRED/rank_result'  # CTDRED
+    # rank_result_path = 'CTDRED/rank_result'  # CTDRED
+    rank_result_path = 'CTDRED/ctd_binary_denoise_n15_inter'  # CTDRED
     # rank_result_path = 'Chemprot/rank_result_fr'  # Chemprot sent
-    pair2triple_path = 'CTDRED/pair2triple.json'  # CTDRED
+    # pair2triple_path = 'CTDRED/pair2triple.json'  # CTDRED
 
-    __file = open('CTDRED/relation_to_id.json')
+    # __file = open('CTDRED/relation_to_id.json')
     # __file = open('CTDRED/relation_to_id_cdr.json')
+    __file = open('CDR/rel2id.json')
     # __file = open('Chemprot/chemprot_relation_to_id.json')
     label2id = json.load(__file)
     __file.close()
 
-    __file = open('CTDRED/id_to_relation.json')
-    # __file = open('CTDRED/id_to_relation_cdr.json')
+    # __file = open('CTDRED/id_to_relation.json')
+    __file = open('CDR/id2rel.json')
     # __file = open('Chemprot/chemprot_id_to_relation.json')
     id2label = json.load(__file)
     __file.close()
 
-    seed = 90
+    seed = 66
 
     label2id: dict
     id2label: list
@@ -81,6 +87,8 @@ class ConfigBase:
 
     learning_rate: float
     weight_decay: int
+    adam_epsilon: float
+    warmup_ratio: float
     epoch_num: int
 
     output_step: int

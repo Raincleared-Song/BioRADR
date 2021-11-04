@@ -356,7 +356,7 @@ def process_intra_rank(data):
 
         negative_samples = random.sample(negative_pairs, Config.negative_num - 1)
         pos = random.randint(0, Config.negative_num - 1)
-        pairs = negative_pairs[:pos] + [random.choice(positive_pairs)] + negative_samples[pos:]
+        pairs = negative_samples[:pos] + [random.choice(positive_pairs)] + negative_samples[pos:]
         label_ids.append(pos)
         for pair in pairs:
             head_ids[-1].append(pair[0])

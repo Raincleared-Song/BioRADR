@@ -19,6 +19,8 @@ def gen_train_facts(data_file_name):
         entities = data['vertexSet']
         for lab in data['labels']:
             rel = lab['r']
+            if rel == 'NA':
+                continue
             for m1 in entities[lab['h']]:
                 for m2 in entities[lab['t']]:
                     fact_in_train.add((m1['name'], m2['name'], rel))
@@ -68,6 +70,8 @@ if __name__ == '__main__':
 
         for label in doc['labels']:
             r = label['r']
+            if r == 'NA':
+                continue
             h_idx = label['h']
             t_idx = label['t']
             std.add((title, r, h_idx, t_idx))

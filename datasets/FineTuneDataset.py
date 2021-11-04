@@ -11,7 +11,7 @@ class FineTuneDataset(Dataset):
         if mode == 'train' or task != 'finetune' and mode == 'valid':
             # abandon those data without labels
             self.data = [item for item in self.data if len(item['labels']) != 0]
-            if task == 'denoise' and 'chemprot' in config.data_path[mode].lower():
+            if task == 'denoise':
                 self.data = [item for item in self.data if self.test_cp_negative(item)]
             random.shuffle(self.data)
         if mode == 'train' and task == 'finetune' and config.use_loss_weight:
@@ -40,4 +40,4 @@ class FineTuneDataset(Dataset):
                 num_c += 1
             else:
                 num_g += 1
-        return num_c * num_g > len(item['labels'])
+        return num_c * num_g > len([lab for lab in item['labels'] if lab['r'] != 'NA'])

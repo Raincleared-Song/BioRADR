@@ -23,7 +23,7 @@ def test(model, datasets, mode: str, config: ConfigBase, path: str = None, epoch
 
     # for test
     docred_res = []
-    na_label = config.relation_num - 1
+    na_label = config.label2id['NA']
 
     pbar = tqdm(range(len(dataset))) if mode == 'test' else None
     # clear_count()

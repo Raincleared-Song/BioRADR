@@ -1,6 +1,8 @@
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 from transformers import BertModel
+from .long_input import process_long_input
 from config import ConfigFineTune as Config
 from utils import eval_multi_label, time_tag
 from torch.autograd import Variable
@@ -14,9 +16,14 @@ class FineTuneModel(nn.Module):
         self.relation_num = Config.relation_num
         self.bert_hidden = Config.bert_hidden
         self.type_embed_size = Config.type_embed_size
+        self.block_size = Config.bilinear_block_size
 
         self.bert = BertModel.from_pretrained(Config.bert_path)
-        self.bilinear = nn.Bilinear(self.bert_hidden, self.bert_hidden, self.rep_hidden)
+
+        if Config.use_group_bilinear:
+            self.bilinear = nn.Linear(self.bert_hidden * self.block_size, self.rep_hidden)
+        else:
+            self.bilinear = nn.Bilinear(self.bert_hidden, self.bert_hidden, self.rep_hidden)
 
         if Config.use_loss_weight:
             self.loss_weights = torch.FloatTensor(Config.loss_weight)
@@ -67,18 +74,35 @@ class FineTuneModel(nn.Module):
         mention_limit = Config.mention_padding
 
         time_tag(3, True, documents.shape)
-        embed_docu = self.bert(documents, attention_mask=data['attn_mask'])[0]
+        if Config.use_long_input:
+            embed_docu = process_long_input(self.bert, documents, data['attn_mask'], Config)
+        else:
+            embed_docu = self.bert(documents, attention_mask=data['attn_mask'])[0]
         time_tag(4, True, embed_docu.shape)
 
         head_rep = embed_docu[[[[i] * mention_limit] * sample_lim for i in range(cur_batch_size)], head_pos]
         tail_rep = embed_docu[[[[i] * mention_limit] * sample_lim for i in range(cur_batch_size)], tail_pos]
         time_tag(5, True, head_rep.shape, tail_rep.shape)
         # max pooling
-        head_rep = torch.max(head_rep.view(cur_batch_size, sample_lim, mention_limit, self.bert_hidden), dim=2)[0]
-        tail_rep = torch.max(tail_rep.view(cur_batch_size, sample_lim, mention_limit, self.bert_hidden), dim=2)[0]
+        if Config.use_logsumexp:
+            head_rep = torch.logsumexp(head_rep.view(cur_batch_size, sample_lim,
+                                                     mention_limit, self.bert_hidden), dim=2)
+            tail_rep = torch.logsumexp(tail_rep.view(cur_batch_size, sample_lim,
+                                                     mention_limit, self.bert_hidden), dim=2)
+        else:
+            head_rep = torch.max(head_rep.view(cur_batch_size, sample_lim, mention_limit, self.bert_hidden), dim=2)[0]
+            tail_rep = torch.max(tail_rep.view(cur_batch_size, sample_lim, mention_limit, self.bert_hidden), dim=2)[0]
+
         time_tag(6, True, head_rep.shape, tail_rep.shape)
 
-        relation_rep = self.bilinear(head_rep, tail_rep)  # (batch, sample_lim, rel_embed)
+        if Config.use_group_bilinear:
+            head_rep = head_rep.view(cur_batch_size, sample_lim, self.bert_hidden // self.block_size, self.block_size)
+            tail_rep = tail_rep.view(cur_batch_size, sample_lim, self.bert_hidden // self.block_size, self.block_size)
+            relation_rep = (head_rep.unsqueeze(4) * tail_rep.unsqueeze(3)).view(cur_batch_size, sample_lim,
+                                                                                self.bert_hidden * self.block_size)
+            relation_rep = self.bilinear(relation_rep)
+        else:
+            relation_rep = self.bilinear(head_rep, tail_rep)  # (batch, sample_lim, rel_embed)
         time_tag(7, True, relation_rep.shape)
 
         if Config.use_entity_type:
@@ -107,9 +131,17 @@ class FineTuneModel(nn.Module):
             time_tag(10, True)
             if mode == 'valid':
                 eval_res['instance_num'] = Config.valid_instance_cnt
-            return {'loss': loss, 'eval_res': eval_res}
+            return {'loss': loss, 'eval_res': eval_res, 'titles': data['titles']}
         else:
+            scores = None
+            if Config.output_score_type == 'sigmoid':
+                scores = torch.sigmoid(predict_out[:, :, Config.label2id['Pos']])
+            elif Config.output_score_type == 'softmax':
+                scores = torch.softmax(predict_out, dim=2)[:, :, Config.label2id['Pos']]
+            if scores is not None:
+                scores = F.pad(scores, (0, Config.test_sample_limit - scores.shape[-1]))
             predict_out = torch.max(predict_out, dim=2)[1]
             return {'predict': predict_out.cpu().tolist(),  # [b, 90]
                     'pair_ids': data['pair_ids'],  # [b, 90, 2]
-                    'titles': data['titles']}  # [b]
+                    'titles': data['titles'],
+                    'score': scores}  # [b]

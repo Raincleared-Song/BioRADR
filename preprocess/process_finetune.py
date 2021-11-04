@@ -34,7 +34,13 @@ def process_finetune(data, mode: str):
     documents, labels, head_poses, tail_poses, label_masks, attn_masks, pairs_list, titles, types = \
         [], [], [], [], [], [], [], [doc['title'] for doc in data], []
     for doc in data:
-        if mode == 'test' and 'labels' in doc:
+        if Config.do_negative_sample:
+            new_labels = []
+            for lab in doc['labels']:
+                if lab['r'] != 'NA':
+                    new_labels.append(lab)
+            doc['labels'] = new_labels
+        if Config.do_negative_sample and mode == 'test' and 'labels' in doc:
             del doc['labels']
         document, label, head_pos, tail_pos, label_mask, attn_mask, pair_ids, typ = process_single(doc, mode)
         documents.append(document)
@@ -45,6 +51,16 @@ def process_finetune(data, mode: str):
         attn_masks.append(attn_mask)
         pairs_list.append(pair_ids)
         types.append(typ)
+
+    # pad labels to sample_limit
+    sample_limit = max(len(typ) for typ in types)
+    for lab, head_p, tail_p, lab_mask, typ in zip(labels, head_poses, tail_poses, label_masks, types):
+        lab_mask += [0] * (sample_limit - len(lab_mask))
+        lab += [np.zeros(Config.relation_num)] * (sample_limit - len(lab))
+        head_p += [[0] * Config.mention_padding] * (sample_limit - len(head_p))
+        tail_p += [[0] * Config.mention_padding] * (sample_limit - len(tail_p))
+        typ += [('', '')] * (sample_limit - len(typ))
+
     return {
         'documents': torch.LongTensor(documents),
         'labels': torch.LongTensor(labels),
@@ -101,13 +117,24 @@ def process_single(data, mode: str, extra=None):
 
         for i, eid in enumerate(entity_set):
             for mention in entities[eid]:
-                sentences[mention['sent_id']][mention['pos'][0]].insert(0, f'[unused{(i << 1) + 1}]')
+                tmp: list = sentences[mention['sent_id']][mention['pos'][0]]
+                if Config.use_type_marker:
+                    # [Ei] type * mention [/Ei]
+                    sentences[mention['sent_id']][mention['pos'][0]] = \
+                        [f'[unused{(i << 1) + 1}]', mention['type'], '*'] + tmp
+                else:
+                    sentences[mention['sent_id']][mention['pos'][0]] = [f'[unused{(i << 1) + 1}]'] + tmp
                 sentences[mention['sent_id']][mention['pos'][1] - 1].append(f'[unused{(i + 1) << 1}]')
 
     else:
         for i, mentions in enumerate(entities):
             for mention in mentions:
-                sentences[mention['sent_id']][mention['pos'][0]].insert(0, f'[unused{(i << 1) + 1}]')
+                tmp: list = sentences[mention['sent_id']][mention['pos'][0]]
+                if Config.use_type_marker:
+                    sentences[mention['sent_id']][mention['pos'][0]] = \
+                        [f'[unused{(i << 1) + 1}]', mention['type'], '*'] + tmp
+                else:
+                    sentences[mention['sent_id']][mention['pos'][0]] = [f'[unused{(i << 1) + 1}]'] + tmp
                 sentences[mention['sent_id']][mention['pos'][1] - 1].append(f'[unused{(i + 1) << 1}]')
 
     word_position, document = [], ['[CLS]']
@@ -144,10 +171,12 @@ def process_single(data, mode: str, extra=None):
 
     label_mat = np.zeros((entity_num, entity_num, Config.relation_num))
     label_mat[:, :, Config.label2id['NA']] = 1
-    positive_pairs = set()
+    positive_pairs = set()  # may have NA if not do_negative_sample
     if 'labels' in data:
         for lab in data['labels']:
             positive_pairs.add((lab['h'], lab['t']))
+            if lab['r'] == 'NA':
+                continue
             label_mat[lab['h'], lab['t'], Config.label2id[lab['r']]] = 1
             label_mat[lab['h'], lab['t'], Config.label2id['NA']] = 0
     if use_cp:
@@ -168,12 +197,38 @@ def process_single(data, mode: str, extra=None):
         samples = [pair[0] for pair in reserved_pairs]
     elif mode == 'train':
         sample_limit = Config.train_sample_limit
-        samples = list(positive_pairs) + random.sample(negative_pairs, min(len(positive_pairs) * 3,
-                                                                           sample_limit - len(positive_pairs),
-                                                                           len(negative_pairs)))
+        samples = list(positive_pairs)
+        if Config.do_negative_sample:
+            samples += random.sample(negative_pairs, min(len(positive_pairs) * 3,
+                                                         sample_limit - len(positive_pairs),
+                                                         len(negative_pairs)))
     else:
         sample_limit = Config.test_sample_limit
-        samples = list(positive_pairs) + negative_pairs
+        samples = list(positive_pairs)
+        if Config.do_negative_sample:
+            samples += negative_pairs
+        # TODO: finetune 时需要删除
+        elif mode == 'test':
+            samples = []
+            for i in range(entity_num):
+                for j in range(entity_num):
+                    if entities[i][0]['type'] == 'Chemical' and entities[j][0]['type'] == 'Disease':
+                        samples.append((i, j))
+            assert len(samples) == len(positive_pairs)
+
+    if not Config.do_negative_sample:
+        try:
+            assert len(samples) == len(data['labels'])
+        except AssertionError as err:
+            print('------------------------------')
+            print(samples)
+            print(data['labels'])
+            print(data['pmid'])
+            print('------------------------------')
+            raise err
+    else:
+        for lab in data['labels']:
+            assert lab['r'] != 'NA'
 
     for pair in samples:
         pair_ids.append(pair)
@@ -184,12 +239,13 @@ def process_single(data, mode: str, extra=None):
         types.append((entities[pair[0]][0]['type'], entities[pair[1]][0]['type']))
 
     assert len(labels) <= sample_limit
-    # pad labels to sample_limit
-    label_mask = [1] * len(labels) + [0] * (sample_limit - len(labels))
-    labels += [np.zeros(Config.relation_num)] * (sample_limit - len(labels))
-    head_pos += [[0] * Config.mention_padding] * (sample_limit - len(head_pos))
-    tail_pos += [[0] * Config.mention_padding] * (sample_limit - len(tail_pos))
-    types += [('', '')] * (sample_limit - len(types))
+    label_mask = [1] * len(labels)
+
+    # label_mask = [1] * len(labels) + [0] * (sample_limit - len(label_mask))
+    # labels += [np.zeros(Config.relation_num)] * (sample_limit - len(labels))
+    # head_pos += [[0] * Config.mention_padding] * (sample_limit - len(head_pos))
+    # tail_pos += [[0] * Config.mention_padding] * (sample_limit - len(tail_pos))
+    # types += [('', '')] * (sample_limit - len(types))
 
     # document: sentence_num * token_num: 512
     # head/tail: sample_limit * mention_num: 3

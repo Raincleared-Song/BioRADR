@@ -69,7 +69,7 @@ def search_term(term: str, db: str = 'mesh', ret_max: int = 100):
     return ret
 
 
-def fetch_uid(uids: list, db: str = 'mesh'):
+def fetch_uids(uids: list, db: str = 'mesh'):
     uid_str = ','.join(uids)
     url = f'https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db={db}&id={uid_str}&retmode=json'
     cont = repeat_request(url)
@@ -221,13 +221,14 @@ def main1():
             if pmid not in doc2labels:
                 doc2labels[pmid] = []
             doc2labels[pmid].append((hid, tid, rel))
-    # for key, val in rel_null_set.items():
-    #     hid, tid = key
-    #     for pmid in val:
-    #         if pmid not in doc2labels:
-    #             doc2labels[pmid] = []
-    #         doc2labels[pmid].append((hid, tid, -1))
     save_json(doc2labels, 'CTDRED/ctd_doc_to_labels.json')
+    for key, val in rel_null_set.items():
+        hid, tid = key
+        for pmid in val:
+            if pmid not in doc2labels:
+                doc2labels[pmid] = []
+            doc2labels[pmid].append((hid, tid, -1))
+    save_json(doc2labels, 'CTDRED/ctd_doc_to_labels_complete.json')
 
 
 def pubtator_to_docred(doc, labels):
@@ -515,7 +516,41 @@ def add_null_labels(binary=False):
 
 
 if __name__ == '__main__':
+    # from tqdm import tqdm
+    # for part in ('negative_train_mixed', 'negative_dev', 'negative_test'):
+    #     data = load_json(f'CTDRED/{part}_binary_pos.json')
+    #     exist_cids = []
+    #     for doc in tqdm(data):
+    #         pmid = doc['pmid']
+    #         url = f'https://ctdbase.org/detail.go?type=reference&acc={pmid}'
+    #         if 'we could not find the reference you requested' in repeat_request(url):
+    #             exist_cids.append(pmid)
+    #     save_json(exist_cids, f'CTDRED/{part}_exist.json')
+    # exit()
+
     # 扩充数据集
+    doc2rels = load_json('CTDRED/ctd_doc_to_labels_complete.json')
+    for part in ('train_mixed', 'dev', 'test', 'negative_train_mixed', 'negative_dev', 'negative_test'):
+        cnt = [0, 0, 0]
+        in_cnt = 0
+        data = load_json(f'CTDRED/{part}_binary_pos.json')
+        for doc in data:
+            pmid = str(doc['pmid'])
+            cids = set(doc['cids'])
+            if pmid in doc2rels:
+                in_cnt += 1
+                for rel in doc2rels[pmid]:
+                    if rel[0] in cids and rel[1] in cids:
+                        cnt[rel[2]] += 1
+        print(part, cnt, len(data), in_cnt)
+        # train_mixed [9273, 5116, 1397] 5603 3838
+        # dev [4970, 2598, 871] 5341 4309
+        # test [5022, 2735, 967] 5371 4356
+        # negative_train_mixed [1132, 523, 72] 38212 1062
+        # negative_dev [846, 478, 47] 33446 935
+        # negative_test [1636, 757, 81] 56652 1712
+    exit()
+
     # result = search_get_pubmed(['Naloxone', 'clonidine'])
     # pubtator_to_docred(list(result.values())[0])
     # exit()

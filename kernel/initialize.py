@@ -112,7 +112,7 @@ def init_dataset(task: str, mode: str):
     return DataLoader(
         dataset=dataset_type(task, mode),
         batch_size=config.batch_size[mode],
-        shuffle=True,
+        shuffle=(mode == 'train'),
         num_workers=config.reader_num,
         collate_fn=collate_fn,
         drop_last=(mode == 'train'),

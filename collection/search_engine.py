@@ -16,11 +16,14 @@ warnings.filterwarnings(action='ignore', module='.*?spacy.*?')
 
 
 GLOBAL = {
+    'part_names': ['train_mixed', 'dev', 'test', 'negative_train_mixed', 'negative_dev', 'negative_test',
+                   'negative_train_extra', 'negative_dev_extra', 'negative_test_extra', 'ctd_extra'],
     'linker': spacy.language.Language(),
     'pair_to_docs': {},
     'chemical_to_tail_doc': {},
     'disease_to_head_doc': {},
-    'documents': {},
+    'mesh_id_to_name': {},
+    'pmid_to_part': {},
     'model': None,
     'args': None
 }
@@ -40,6 +43,36 @@ def spell_and_link(entity: str):
         return '', 'link failed'
     cid = kbs[0][0]
     return entity, cid
+
+
+def get_documents_by_pmids(pmids: list, require_all: bool):
+    """
+    :param pmids: list of int pmids
+    :param require_all if every pmid should be loaded
+    :return: DocRED format documents
+    """
+    global GLOBAL
+    pmid_to_part = GLOBAL['pmid_to_part']
+    if require_all:
+        for pmid in pmids:
+            assert pmid in pmid_to_part
+    else:
+        pmids = [pmid for pmid in pmids if pmid in pmid_to_part]
+    ret = [{} for _ in range(len(pmids))]
+    part_names = GLOBAL['part_names']
+    pmid2idx = {pmid: i for i, pmid in enumerate(pmids)}
+    part2pmids = {pid: [] for pid in range(len(part_names))}
+    for pmid in pmids:
+        part2pmids[pmid_to_part[pmid]].append(pmid)
+    for pid, val in part2pmids.items():
+        if len(val) <= 0:
+            continue
+        data = load_json(f'CTDRED/{part_names[pid]}_binary_pos.json')
+        data = {doc['pmid']: doc for doc in data}
+        for pmid in val:
+            ret[pmid2idx[pmid]] = data[pmid]
+        del data
+    return ret
 
 
 def gen_score(args, model, dataset):
@@ -104,7 +137,17 @@ def model_score(docs: list, cid1: str, cid2: str):
         assert pmid == doc['pmid']
     for idx, doc in enumerate(docs):
         ret.append((doc, scores[idx, 0]))
+    ret.sort(key=lambda x: x[1], reverse=True)
     return ret
+
+
+def get_name_by_mesh_id(mesh_id: str):
+    global GLOBAL
+    mesh_id_to_name = GLOBAL['mesh_id_to_name']
+    if mesh_id not in mesh_id_to_name:
+        return 'UNK'
+    else:
+        return mesh_id_to_name[mesh_id]
 
 
 def process(entity1: str, entity2: str):
@@ -113,67 +156,83 @@ def process(entity1: str, entity2: str):
     if entity1 != '':
         entity1, cid1 = spell_and_link(entity1)
         if entity1 == '':
-            raise ValueError(cid1)
+            return 'entity1 link failure'
     if entity2 != '':
         entity2, cid2 = spell_and_link(entity2)
         if entity2 == '':
-            raise ValueError(cid2)
+            return 'entity2 link failure'
     print(f'entity1: [{cid1}] entity2: [{cid2}]')
     assert not (entity1 == '' and entity2 == '')
     if entity1 != '' and entity2 != '':
         assert is_mesh_id(cid1) and is_mesh_id(cid2)
         pair = cid1 + '&' + cid2
-        documents, pair_to_docs = GLOBAL['documents'], GLOBAL['pair_to_docs']
+        pair_to_docs = GLOBAL['pair_to_docs']
         if pair not in pair_to_docs:
             return []
         docs = pair_to_docs[pair][0] + pair_to_docs[pair][1]
-        docs = [documents[pmid] for pmid in docs]
-        ret = [(model_score(docs, cid1, cid2), cid1, cid2)]
+        docs = get_documents_by_pmids(docs, require_all=True)
+        ret = [(model_score(docs, cid1, cid2), cid1, get_name_by_mesh_id(cid1), cid2, get_name_by_mesh_id(cid2))]
         return ret
     # entity1 == '' or entity2 == ''
-    # TODO 先返回实体再选择
     if entity1 == '':
         # find heads of entity2
         assert is_mesh_id(cid2)
         disease_to_head_doc = GLOBAL['disease_to_head_doc']
         if cid2 not in disease_to_head_doc:
             return []
-        pairs = set()
+        candidates = []
         for cid1, _ in disease_to_head_doc[cid2]:
             # 只取 MeSH 的实体
             if is_mesh_id(cid1):
-                pairs.add(cid1 + '&' + cid2)
+                candidates.append(cid1)
     else:
         # find tails of entity1
         assert is_mesh_id(cid1)
         chemical_to_tail_doc = GLOBAL['chemical_to_tail_doc']
         if cid1 not in chemical_to_tail_doc:
             return []
-        pairs = set()
+        candidates = []
         for cid2, _ in chemical_to_tail_doc[cid1]:
             # 只取 MeSH 的实体
             if is_mesh_id(cid2):
-                pairs.add(cid1 + '&' + cid2)
-    ret = []
-    documents, pair_to_docs = GLOBAL['documents'], GLOBAL['pair_to_docs']
-    for pair in pairs:
-        cid1, cid2 = pair.split('&')
-        if pair not in pair_to_docs:
-            ret.append(([], cid1, cid2))
-            continue
-        docs = pair_to_docs[pair][0] + pair_to_docs[pair][1]
-        docs = [documents[pmid] for pmid in docs if pmid in documents]
-        ret.append((model_score(docs, cid1, cid2), cid1, cid2))
-    return ret
+                candidates.append(cid2)
+    candidate_num = len(candidates)
+    if candidate_num == 0:
+        return 'no candidate head entities'
+    start, end = 0, 4
+    while start < candidate_num:
+        to_print = []
+        for idx, cid in enumerate(candidates[start:end]):
+            cname = get_name_by_mesh_id(cid)
+            to_print.append(f'{(start + idx):2}-{cid}: {cname}')
+        print(*to_print, sep='\t')
+        start, end = end, end + 4
+    candidate_id = int(repeat_input('please input a candidate idx > ', int_range=(0, candidate_num)))
+    if entity1 == '':
+        candidate_pair = candidates[candidate_id] + '&' + cid2
+    else:
+        candidate_pair = cid1 + '&' + candidates[candidate_id]
+    pair_to_docs = GLOBAL['pair_to_docs']
+    cid1, cid2 = candidate_pair.split('&')
+    cname1, cname2 = get_name_by_mesh_id(cid1), get_name_by_mesh_id(cid2)
+    if candidate_pair not in pair_to_docs:
+        return [([], cid1, cname1, cid2, cname2)]
+    docs = pair_to_docs[candidate_pair][0] + pair_to_docs[candidate_pair][1]
+    docs = get_documents_by_pmids(docs, require_all=False)
+    return [(model_score(docs, cid1, cid2), cid1, cname1, cid2, cname2)]
 
 
-def repeat_input(info: str, restrict=None):
+def repeat_input(info: str, restrict=None, int_range=None):
     cont = ''
     while cont == '':
         cont = input(info).strip()
         if restrict is not None and len(restrict) > 0 and cont not in restrict:
             print(f'input should be in {restrict}')
             cont = ''
+        if int_range is not None:
+            assert len(int_range) == 2
+            if not cont.isdigit() or int(cont) >= int_range[1] or int(cont) < int_range[0]:
+                print(f'input should be an integer and in {int_range}')
     return cont
 
 
@@ -206,20 +265,15 @@ def init_all():
     nlp.add_pipe('scispacy_linker', config={'resolve_abbreviations': True, 'linker_name': 'mesh'})
     GLOBAL['linker'] = nlp
 
-    # init documents
-    documents = {}
-    for part in ['train_mixed', 'dev', 'test', 'negative_train_mixed', 'negative_dev', 'negative_test']:
-        data = load_json(f'CTDRED/{part}_binary_pos.json')
-        for doc in data:
-            pmid = int(doc['pmid'])
-            assert pmid not in documents
-            documents[pmid] = doc
-    GLOBAL['documents'] = documents
-
     # init pair to docs (in data), entity_to_other (in ctd)
     GLOBAL['pair_to_docs'] = load_json('CTDRED/pair_to_docs.json')
     GLOBAL['chemical_to_tail_doc'] = load_json('CTDRED/chemical_to_tail_doc.json')
     GLOBAL['disease_to_head_doc'] = load_json('CTDRED/disease_to_head_doc.json')
+    GLOBAL['mesh_id_to_name'] = load_json('CTDRED/mesh_id_to_name.json')
+    tmp = {}
+    for key, val in load_json('CTDRED/pmid_to_part.json').items():
+        tmp[int(key)] = val
+    GLOBAL['pmid_to_part'] = tmp
     print('loaded number of pairs:', len(GLOBAL['pair_to_docs']))
 
 
@@ -255,8 +309,11 @@ def main_loop():
                     ret = process('', entity2)
             else:
                 ret = process(entity1, entity2)
-            for result, cid1, cid2 in ret:
-                print('============', cid1, cid2, '============')
+            if isinstance(ret, str):
+                print('============', ret, '============')
+                continue
+            for result, cid1, cname1, cid2, cname2 in ret:
+                print('============', cid1, cname1, '||', cid2, cname2, '============')
                 for doc, score in result:
                     print(doc['pmid'], score, sep='\t')
         except Exception as err:

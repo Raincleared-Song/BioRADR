@@ -41,7 +41,7 @@ class ConfigBase:
     # rank_result_path = 'CTDRED/rank_result'  # CTDRED
     rank_result_path = 'CTDRED/ctd_binary_denoise_n15_inter'  # CTDRED
     # rank_result_path = 'Chemprot/rank_result_fr'  # Chemprot sent
-    # pair2triple_path = 'CTDRED/pair2triple.json'  # CTDRED
+    pair2triple_path = 'CTDRED/pair2triple.json'  # CTDRED
 
     # __file = open('CTDRED/relation_to_id.json')
     # __file = open('CTDRED/relation_to_id_cdr.json')

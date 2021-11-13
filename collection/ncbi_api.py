@@ -58,7 +58,7 @@ def repeat_request(url: str, max_time: int = 10):
 def search_term(term: str, db: str = 'mesh', ret_max: int = 100):
     """List of uids"""
     url = f'https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi?db={db}&term={term}' \
-          f'&retmode=json&field=title&retmax={ret_max}'
+          f'&retmode=json&retmax={ret_max}'
     url = url.strip().replace(' ', '+')
     cont = json.loads(repeat_request(url))
     try:
@@ -113,32 +113,35 @@ def get_pmids(pmids: list, concepts: list = None):
     if len(pmids) == 0:
         return {}
     if concepts is None:
-        concepts = ['chemical', 'disease', 'gene']
+        concepts = ['chemical', 'disease']
     concept_str = ','.join(concepts)
-    pmid_str = ','.join(pmids)
-    url = f'https://www.ncbi.nlm.nih.gov/research/pubtator-api/publications/export/biocjson?' \
-          f'pmids={pmid_str}&concepts={concept_str}'
-    cont = repeat_request(url)
+    start, end = 0, 100
     ret = {}
-    for js in cont.split('\n'):
-        if len(js.strip()) == 0:
-            continue
-        doc = json.loads(js)
-        passages = doc['passages']
-        title = ''
-        texts = []
-        annotations = []
-        if len(passages) > 0:
-            title = passages[0]['text']
-        for section in passages:
-            texts.append(section['text'])
-            annotations += section['annotations']
-        ret[doc['id']] = {
-            'pmid': doc['id'],
-            'title': title,
-            'text': ' '.join(texts),
-            'entities': annotations
-        }
+    while start < end and start < len(pmids):
+        pmid_str = ','.join(pmids[start:end])
+        url = f'https://www.ncbi.nlm.nih.gov/research/pubtator-api/publications/export/biocjson?' \
+              f'pmids={pmid_str}&concepts={concept_str}'
+        cont = repeat_request(url)
+        for js in cont.split('\n'):
+            if len(js.strip()) == 0:
+                continue
+            doc = json.loads(js)
+            passages = doc['passages']
+            title = ''
+            texts = []
+            annotations = []
+            if len(passages) > 0:
+                title = passages[0]['text']
+            for section in passages:
+                texts.append(section['text'])
+                annotations += section['annotations']
+            ret[doc['id']] = {
+                'pmid': doc['id'],
+                'title': title,
+                'text': ' '.join(texts),
+                'entities': annotations
+            }
+        start, end = end, end + 100
     return ret
 
 
@@ -146,7 +149,7 @@ def search_get_pubmed(entities: list, pmid_filter: set = None, ent_pair: tuple =
     id_list = search_term(' '.join(entities), db='pubmed', ret_max=ret_max)
     if pmid_filter is not None:
         # 过滤已知包含正例的文章
-        id_list = [pid for pid in id_list if pid not in pmid_filter]
+        id_list = [pid for pid in id_list if int(pid) not in pmid_filter]
     ret = get_pmids(id_list)
     if ent_pair is not None:
         # 过滤不包含这两个实体的文章
@@ -231,6 +234,9 @@ def main1():
     save_json(doc2labels, 'CTDRED/ctd_doc_to_labels_complete.json')
 
 
+mesh_convert = load_json('CTDRED/mesh_convert.json')
+
+
 def pubtator_to_docred(doc, labels):
     offsets = []
     eid2offsets = {}
@@ -246,6 +252,8 @@ def pubtator_to_docred(doc, labels):
             offsets.append((off, off + le))
             if cid.startswith('MESH:'):
                 cid = cid[5:]
+            if cid in mesh_convert:
+                cid = mesh_convert[cid]
             if cid not in eid2offsets:
                 eid2offsets[cid] = []
             eid2offsets[cid].append((off, off + le, entity['infons']['type'], name))
@@ -341,7 +349,6 @@ def pubtator_to_docred(doc, labels):
             })
         vertex_set.append(cur_entity)
 
-    id2rel = ['chem_disease_marker/mechanism', 'chem_disease_therapeutic']
     label_set = []
     for hid, tid, rel in labels:
         if not (hid in mesh2id and tid in mesh2id):
@@ -351,11 +358,11 @@ def pubtator_to_docred(doc, labels):
         label_set.append({
             'h': h,
             't': t,
-            'r': id2rel[rel],
+            'r': 'Pos',
         })
 
     return {
-        'pmid': doc['pmid'],
+        'pmid': int(doc['pmid']),
         'cids': cids,
         'vertexSet': vertex_set,
         'title': title,
@@ -366,23 +373,27 @@ def pubtator_to_docred(doc, labels):
 
 def main2():
     """扩充现有的 CTD 数据集"""
-    rel_set = {(li[0], li[1]): [tuple(t) for t in li[2:]] for li in load_json('CTDRED/ctd_overall_rel.json')}
-    rel_null_set = {(li[0], li[1]): li[2:] for li in load_json('CTDRED/ctd_overall_null_rel.json')}
+    # rel_set = {(li[0], li[1]): [tuple(t) for t in li[2:]] for li in load_json('CTDRED/ctd_overall_rel.json')}
+    # rel_null_set = {(li[0], li[1]): li[2:] for li in load_json('CTDRED/ctd_overall_null_rel.json')}
     doc2labels = {key: tuple(value) for key, value in load_json('CTDRED/ctd_doc_to_labels.json').items()}
     rel_exist_set = {}
     in_data_pmids = set()
-    for part in ['test', 'dev']:
-        data = load_json(f'CTDRED/negative_{part}.json')
-        for doc in data:
-            in_data_pmids.add(doc['pmid'])
-    for part in ('test', 'dev', 'train_mixed'):
-        data = load_json(f'CTDRED/{part}.json')
+    for part in ('test', 'dev', 'train_mixed', 'negative_test', 'negative_dev', 'negative_train_mixed'):
+        data = load_json(f'CTDRED/{part}_binary_pos.json')
         for doc in data:
             assert doc['pmid'] not in in_data_pmids
             in_data_pmids.add(doc['pmid'])
     err_log = open('CTDRED/err_log.txt', 'w', encoding='utf-8')
-    for part in ['train_mixed']:
-        data = load_json(f'CTDRED/{part}.json')
+    for part in ['train_mixed2']:
+        div = 0
+        if part.startswith('train'):
+            div = int(part[-1])
+            part = part[:-1]
+        data = load_json(f'CTDRED/{part}_binary_pos.json')
+        if div == 1:
+            data = data[:(len(data) // 2)]
+        elif div == 2:
+            data = data[(len(data) // 2):]
         pair_sets = {}
         for doc in data:
             cids = doc['cids']
@@ -398,22 +409,28 @@ def main2():
                 )
                 if (cids[h], cids[t]) not in rel_exist_set:
                     rel_exist_set[(cids[h], cids[t])] = []
-                rel_exist_set[(cids[h], cids[t])].append(str(doc['pmid']))
+                rel_exist_set[(cids[h], cids[t])].append(doc['pmid'])
         negative_doc_ids = {}
         pair_sets_len, cur_pair_cnt = len(pair_sets), 0
         for pair, names in pair_sets.items():
             filter_set = set()
-            if pair in rel_set:
-                for pid in rel_set[pair]:
-                    filter_set.add(pid[1])
-            if pair in rel_null_set:
-                for pid in rel_null_set[pair]:
-                    filter_set.add(pid)
+            # if pair in rel_set:
+            #     for pid in rel_set[pair]:
+            #         if pid == '':
+            #             continue
+            #         filter_set.add(int(pid[1]))
+            # if pair in rel_null_set:
+            #     for pid in rel_null_set[pair]:
+            #         if pid == '':
+            #             continue
+            #         filter_set.add(int(pid))
             if pair in rel_exist_set:
                 for pid in rel_exist_set[pair]:
-                    filter_set.add(pid)
+                    if pid == '':
+                        continue
+                    filter_set.add(int(pid))
             filter_set |= in_data_pmids
-            docs = search_get_pubmed(list(names), pmid_filter=filter_set, ent_pair=pair)
+            docs = search_get_pubmed(list(names), pmid_filter=filter_set, ent_pair=pair, ret_max=200)
             for did, val in docs.items():
                 try:
                     negative_doc_ids[did] = pubtator_to_docred(val, doc2labels[did] if did in doc2labels else [])
@@ -421,12 +438,119 @@ def main2():
                     err_log.write(did + '\n')
                     traceback.print_exception(type(err), err, sys.exc_info()[2], file=err_log)
                     err_log.write('============\n')
-                in_data_pmids.add(did)
+                in_data_pmids.add(int(did))
             cur_pair_cnt += 1
             print(f'{part} complete {cur_pair_cnt:5}/{pair_sets_len:5} documents: {len(negative_doc_ids):7}', end='\r')
         print('\ncomplete part:', part)
-        save_json(list(negative_doc_ids.values()), f'CTDRED/negative_{part}.json')
+        save_json(list(negative_doc_ids.values()), f'CTDRED/negative_{part}{div}_extra.json')
     err_log.close()
+
+
+def main3():
+    # test0 182030 182030
+    # dev0 174699 97400
+    # train_mixed1 168930 71208
+    # train_mixed2 163472 53959 125167
+    # ctd0 54924 54428
+    in_data_pmids = set()
+    for part in ('test', 'dev', 'train_mixed', 'negative_test', 'negative_dev', 'negative_train_mixed'):
+        data = load_json(f'CTDRED/{part}_binary_pos.json')
+        for doc in data:
+            assert doc['pmid'] not in in_data_pmids
+            in_data_pmids.add(doc['pmid'])
+        del data
+    pmid_extra = set()
+    train_total = []
+    for part in ['test0', 'dev0', 'train_mixed1', 'train_mixed2', 'ctd0']:
+        data = load_json(f'CTDRED/negative_{part}_extra.json'
+                         if not part.startswith('ctd') else 'CTDRED/ctd0_extra.json')
+        new_data = []
+        # 去重
+        for doc in data:
+            pmid = int(doc['pmid'])
+            assert pmid not in in_data_pmids
+            if pmid in pmid_extra:
+                continue
+            # 删除所有空实体
+            cids, vertex_set, labels = doc['cids'], doc['vertexSet'], doc['labels']
+            assert len(cids) == len(vertex_set)
+            new_cids, new_vertex_set, new_labels = [], [], set()
+            idx_map = {}
+            for idx in range(len(cids)):
+                cid, entity = cids[idx], vertex_set[idx]
+                assert entity[0]['type'] in ('Chemical', 'Disease')
+                if cids[idx] != '-':
+                    idx_map[idx] = len(idx_map)
+                    new_cids.append(cid)
+                    new_vertex_set.append(entity)
+            for entity in new_vertex_set:
+                assert entity[0]['type'] in ('Chemical', 'Disease')
+            if len(new_vertex_set) <= 0:
+                continue
+
+            for lab in labels:
+                assert lab['r'] == 'Pos'
+                if lab['h'] not in idx_map or lab['t'] not in idx_map:
+                    continue
+                new_h, new_t = idx_map[lab['h']], idx_map[lab['t']]
+                new_labels.add((new_h, new_t, lab['r']))
+
+            label_list = []
+            positive_pairs = set()
+            for h, t, rel in new_labels:
+                assert new_vertex_set[h][0]['type'] == 'Chemical' and new_vertex_set[t][0]['type'] == 'Disease'
+                positive_pairs.add((h, t))
+            positive_pairs = sorted(list(positive_pairs))
+            for h, t in positive_pairs:
+                label_list.append({
+                    'h': h,
+                    't': t,
+                    'r': 'Pos'
+                })
+            doc['cids'] = new_cids
+            doc['vertexSet'] = new_vertex_set
+            doc['labels'] = label_list
+            doc['pmid'] = pmid
+            pmid_extra.add(pmid)
+            has_c, has_d = False, False
+            for entity in new_vertex_set:
+                has_c |= entity[0]['type'] == 'Chemical'
+                has_d |= entity[0]['type'] == 'Disease'
+            if has_c and has_d:
+                new_data.append(doc)
+        print(part, len(data), len(new_data))
+        if part.startswith('train'):
+            train_total += new_data
+        else:
+            save_json(new_data, f'CTDRED/negative_{part[:-1]}_extra_binary_pos.json'
+                                if not part.startswith('ctd') else 'CTDRED/ctd_extra_binary_pos.json')
+        del data
+        del new_data
+    print(len(train_total))
+    save_json(train_total, 'CTDRED/negative_train_extra_binary_pos.json')
+
+
+def add_ctd_not_included():
+    not_include = load_json('CTDRED/ctd_not_include_cur.json')
+    data, negative_doc_ids = [], {}
+    doc2labels = {key: tuple(value) for key, value in load_json('CTDRED/ctd_doc_to_labels.json').items()}
+    err_log = open('CTDRED/err_log.txt', 'w', encoding='utf-8')
+    start, end = 0, 100
+    while start < end and start < len(not_include):
+        pmids = [str(pmid) for pmid in not_include[start:end]]
+        docs = get_pmids(pmids)
+        for did, val in docs.items():
+            try:
+                negative_doc_ids[did] = pubtator_to_docred(val, doc2labels[did] if did in doc2labels else [])
+            except Exception as err:
+                err_log.write(did + '\n')
+                traceback.print_exception(type(err), err, sys.exc_info()[2], file=err_log)
+                err_log.write('============\n')
+        print(f'complete {len(negative_doc_ids):5}/{len(not_include):5}', end='\r')
+        start, end = end, end + 100
+    err_log.close()
+    print()
+    save_json(list(negative_doc_ids.values()), 'CTDRED/ctd_extra.json')
 
 
 def add_null_labels(binary=False):
@@ -515,7 +639,7 @@ def add_null_labels(binary=False):
         print(path, total_instances, after_instances)
 
 
-if __name__ == '__main__':
+def temp_func():
     # from tqdm import tqdm
     # for part in ('negative_train_mixed', 'negative_dev', 'negative_test'):
     #     data = load_json(f'CTDRED/{part}_binary_pos.json')
@@ -773,3 +897,9 @@ if __name__ == '__main__':
             unk_cnt += len(new_labels) - len(base_labels)
         print(part, unk_cnt)
     exit()
+
+
+if __name__ == '__main__':
+    # main2()
+    # add_ctd_not_included()
+    main3()

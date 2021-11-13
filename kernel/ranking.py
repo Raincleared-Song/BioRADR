@@ -15,18 +15,24 @@ def rank(config: ConfigBase, models, datasets):
     os.makedirs(rank_output_path, exist_ok=True)
 
     with torch.no_grad():
-        scores, titles = gen_score(config, models['model'], datasets['test'], rank_output_path)
+        scores, titles, sample_counts = gen_score(config, models['model'], datasets['test'], rank_output_path)
 
     rank_file = os.path.basename(config.data_path['test'])
     score_path = os.path.join(config.rank_result_path, f'{os.path.splitext(rank_file)[0]}_score.npy')
-    title_path = os.path.join(config.rank_result_path, f'{os.path.splitext(rank_file)[0]}_title.json')
+    # v2.0 dense 1D vector
+    title_path = os.path.join(config.rank_result_path, f'{os.path.splitext(rank_file)[0]}_pmid2range.json')
 
-    scores = np.vstack(scores)
-    np.save(score_path, scores)
-    save_json(titles, title_path)
-
-    assert scores.shape[0] == len(titles)
-    print(np.shape(scores), np.shape(titles))
+    assert len(scores) == len(titles) == len(sample_counts)
+    score_1d, pmid2range = [], {}
+    for score, title, cnt in zip(scores, titles, sample_counts):
+        assert len(score) >= cnt > 0
+        score = score[:cnt]
+        pmid2range[title] = (len(score_1d), len(score_1d) + len(score))
+        score_1d += score
+    score_1d = np.array(score_1d)
+    np.save(score_path, score_1d)
+    save_json(pmid2range, title_path)
+    print(np.shape(score_1d), np.shape(titles))
 
 
 def gen_score(config: ConfigBase, model, dataset, path: str):
@@ -42,6 +48,7 @@ def gen_score(config: ConfigBase, model, dataset, path: str):
     step = -1
     scores = []
     titles = []
+    sample_counts = []
 
     for step, data in enumerate(dataset):
         for key, value in data.items():
@@ -51,6 +58,7 @@ def gen_score(config: ConfigBase, model, dataset, path: str):
         result = model(data, 'test', eval_res)
         scores += result['score'].cpu().tolist()
         titles += result['titles']
+        sample_counts += data['sample_counts']
 
         if step % output_time == 0:
             time_spent = timer() - start_time
@@ -65,4 +73,4 @@ def gen_score(config: ConfigBase, model, dataset, path: str):
                 f'{(total_loss / (step + 1)):.3f}', 'ranking',
                 os.path.join(path, 'log.txt'))
 
-    return scores, titles
+    return scores, titles, sample_counts

@@ -53,14 +53,19 @@ def load_pretrain_data(mode: str):
     if Config.use_score:
         scores = sigmoid(np.load(Config.score_path[mode]))
         titles = load_json(Config.title_path[mode])
-        title_to_id = {titles[i]: i for i in range(len(titles))}
+        if isinstance(titles, list):
+            titles = {title: i for i, title in enumerate(titles)}
         for did, doc in enumerate(data):
             entities = doc['vertexSet']
             entity_num = len(entities)
             # abandon those documents with less than 5 entities
             if entity_num < 5:
                 continue
-            score = scores[title_to_id[doc['title']]]
+            t_idx = titles[int(doc['pmid'])]
+            if isinstance(t_idx, int):
+                score = scores[t_idx]
+            else:
+                score = scores[t_idx[0]:t_idx[1]]
             pair_to_score = []
             for i in range(entity_num):
                 for j in range(entity_num):

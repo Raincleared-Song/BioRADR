@@ -35,21 +35,32 @@ def process_denoise_test(data, mode: str):
                         if entities[i][0]['type'].lower().startswith('chemical') and \
                                 entities[j][0]['type'].lower().startswith('gene'):
                             pairs.append((i, j))
-                assert len(pairs) <= Config.test_sample_limit
-                pairs += [(0, 0)] * (Config.test_sample_limit - len(pairs))
             else:
                 entities = doc['vertexSet']
                 pairs = [(i, j) for i in range(entity_num) for j in range(entity_num) if
                          entities[i][0]['type'] == 'Chemical' and entities[j][0]['type'] == 'Disease']
-                pairs += [(0, 0)] * (Config.test_sample_limit - len(pairs))
             head_ids.append([pair[0] for pair in pairs])
             tail_ids.append([pair[1] for pair in pairs])
-            titles.append(doc['title'])
+            titles.append(int(doc['pmid']))
         else:
             head_id, tail_id, pos_id = process_rank(doc)
             head_ids.append(head_id)
             tail_ids.append(tail_id)
             pos_ids.append(pos_id)
+
+    # dynamic pad positions
+    entity_padding = max(len(item) for item in word_positions)
+    for item in word_positions:
+        for _ in range(entity_padding - len(item)):
+            item.append([0] * Config.mention_padding)
+    # dynamic pad head/tail ids
+    test_sample_limit = max(len(item) for item in head_ids)
+    sample_counts = []
+    for head_id, tail_id in zip(head_ids, tail_ids):
+        assert len(head_id) == len(tail_id)
+        sample_counts.append(len(head_id))
+        head_id += [0] * (test_sample_limit - len(head_id))
+        tail_id += [0] * (test_sample_limit - len(tail_id))
 
     if mode == 'test':
         return {
@@ -58,7 +69,8 @@ def process_denoise_test(data, mode: str):
             'word_pos': torch.LongTensor(word_positions),
             'head_ids': torch.LongTensor(head_ids),
             'tail_ids': torch.LongTensor(tail_ids),
-            'titles': titles
+            'titles': titles,
+            'sample_counts': sample_counts
         }
     else:
         return {
@@ -116,10 +128,6 @@ def process_document(data, mode: str):
         if len(positions[i]) == 0:
             positions[i] = [0] * Config.mention_padding
         positions[i] += [positions[i][0]] * (Config.mention_padding - len(positions[i]))
-
-    # padding entity number to 42
-    while len(positions) < Config.entity_padding[mode]:
-        positions.append([0] * Config.mention_padding)
 
     return Config.tokenizer.convert_tokens_to_ids(document), attn_mask, positions
 

@@ -21,18 +21,21 @@ if use_score:
         'valid': load_json(Config.title_path['valid']),
         'test': load_json(Config.title_path['test'])
     }
-    mode_to_titles = {
-        'train': {title_list['train'][i]: i for i in range(len(title_list['train']))},
-        'valid': {title_list['valid'][i]: i for i in range(len(title_list['valid']))},
-        'test': {title_list['test'][i]: i for i in range(len(title_list['test']))}
-    }
+    if isinstance(title_list['train'], list):
+        mode_to_titles = {
+            'train': {title_list['train'][i]: i for i in range(len(title_list['train']))},
+            'valid': {title_list['valid'][i]: i for i in range(len(title_list['valid']))},
+            'test': {title_list['test'][i]: i for i in range(len(title_list['test']))}
+        }
+    else:
+        mode_to_titles = title_list
 
 
 def process_finetune(data, mode: str):
     global use_cp
     use_cp = 'chemprot' in Config.data_path[mode].lower()
     documents, labels, head_poses, tail_poses, label_masks, attn_masks, pairs_list, titles, types = \
-        [], [], [], [], [], [], [], [doc['title'] for doc in data], []
+        [], [], [], [], [], [], [], [int(doc['pmid']) for doc in data], []
     for doc in data:
         if Config.do_negative_sample:
             new_labels = []
@@ -86,7 +89,12 @@ def process_single(data, mode: str, extra=None):
     if use_score:
         titles = mode_to_titles[mode]
         # noinspection PyUnresolvedReferences
-        scores = mode_to_scores[mode][titles[data['title']]]
+        t_idx = titles[int(data['pmid'])]
+        if isinstance(t_idx, int):
+            # title -> score matrix row id
+            scores = mode_to_scores[mode][t_idx]
+        else:
+            scores = mode_to_scores[mode][t_idx[0]:t_idx[1]]
         pair_scores = []
         for i in range(entity_num):
             for j in range(entity_num):

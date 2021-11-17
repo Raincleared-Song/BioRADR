@@ -45,12 +45,12 @@ class ConfigFineTune(ConfigBase):
     #     'test': f'{ConfigBase.rank_result_path}/test_title.json'
     # }
     title_path = {
-        'train': f'{ConfigBase.rank_result_path}/train_mixed_binary_pos_title.json',
-        'valid': f'{ConfigBase.rank_result_path}/dev_binary_pos_title.json',
-        'test': f'{ConfigBase.rank_result_path}/test_binary_pos_title.json',
-        'negative_train': f'{ConfigBase.rank_result_path}/negative_train_mixed_binary_pos_title.json',
-        'negative_valid': f'{ConfigBase.rank_result_path}/negative_dev_binary_pos_title.json',
-        'negative_test': f'{ConfigBase.rank_result_path}/negative_test_binary_pos_title.json'
+        'train': f'{ConfigBase.rank_result_path}/train_mixed_binary_pos_pmid2range.json',
+        'valid': f'{ConfigBase.rank_result_path}/dev_binary_pos_pmid2range.json',
+        'test': f'{ConfigBase.rank_result_path}/test_binary_pos_pmid2range.json',
+        'negative_train': f'{ConfigBase.rank_result_path}/negative_train_mixed_binary_pos_pmid2range.json',
+        'negative_valid': f'{ConfigBase.rank_result_path}/negative_dev_binary_pos_pmid2range.json',
+        'negative_test': f'{ConfigBase.rank_result_path}/negative_test_binary_pos_pmid2range.json'
     }
 
     reader_num = 30

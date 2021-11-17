@@ -5,6 +5,8 @@ import json
 import xml.sax
 import requests
 import traceback
+import jsonlines
+from timeit import default_timer as timer
 from requests.exceptions import ReadTimeout, ConnectionError
 
 
@@ -21,6 +23,13 @@ def save_json(obj: object, path: str):
     file = open(path, 'w')
     json.dump(obj, file)
     file.close()
+
+
+def time_to_str(clock):
+    clock = int(clock)
+    minute = clock // 60
+    second = clock % 60
+    return '%2d:%02d' % (minute, second)
 
 
 class SpellHandler(xml.sax.handler.ContentHandler):
@@ -58,20 +67,24 @@ def repeat_request(url: str, max_time: int = 10):
 def search_term(term: str, db: str = 'mesh', ret_max: int = 100):
     """List of uids"""
     url = f'https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi?db={db}&term={term}' \
-          f'&retmode=json&retmax={ret_max}'
+          f'&retmode=json&retmax={ret_max}&api_key=326042ba82c2800f8fcf63717f14d8063708'
     url = url.strip().replace(' ', '+')
-    cont = json.loads(repeat_request(url))
+    response = repeat_request(url)
     try:
+        cont = json.loads(response)
         ret = cont['esearchresult']['idlist']
-    except KeyError:
+    except Exception as err:
         ret = []
-        print('key error:', url, cont)
+        print(file=err_log_global)
+        print(type(err), err, file=err_log_global)
+        print('json/key error:', url, response, file=err_log_global)
     return ret
 
 
 def fetch_uids(uids: list, db: str = 'mesh'):
     uid_str = ','.join(uids)
-    url = f'https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db={db}&id={uid_str}&retmode=json'
+    url = f'https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db={db}&id={uid_str}&retmode=json' \
+          f'&api_key=326042ba82c2800f8fcf63717f14d8063708'
     cont = repeat_request(url)
     return cont
 
@@ -79,7 +92,8 @@ def fetch_uids(uids: list, db: str = 'mesh'):
 def summary_uids(uids: list, db: str = 'mesh'):
     uid_str = ','.join(uids)
     """uid -> tuple[description, entry_terms (synonyms), link_entities, MeSH_ID]"""
-    url = f'https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esummary.fcgi?db={db}&id={uid_str}&retmode=json'
+    url = f'https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esummary.fcgi?db={db}&id={uid_str}&retmode=json' \
+          f'&api_key=326042ba82c2800f8fcf63717f14d8063708'
     cont = json.loads(repeat_request(url))['result']
     if len(cont['uids']) != len(uids):
         print(f'Summary Failed: {uid_str} result: {cont}', file=sys.stderr)
@@ -101,7 +115,8 @@ def summary_uids(uids: list, db: str = 'mesh'):
 
 def spell_term(term: str, db: str = 'mesh'):
     """拼写纠错，编辑距离较短时效果较好"""
-    url = f'https://eutils.ncbi.nlm.nih.gov/entrez/eutils/espell.fcgi?db={db}&term={term}'
+    url = f'https://eutils.ncbi.nlm.nih.gov/entrez/eutils/espell.fcgi?db={db}&term={term}' \
+          f'&api_key=326042ba82c2800f8fcf63717f14d8063708'
     url = url.strip().replace(' ', '+')
     cont = repeat_request(url)
     handler = SpellHandler(term)
@@ -120,12 +135,20 @@ def get_pmids(pmids: list, concepts: list = None):
     while start < end and start < len(pmids):
         pmid_str = ','.join(pmids[start:end])
         url = f'https://www.ncbi.nlm.nih.gov/research/pubtator-api/publications/export/biocjson?' \
-              f'pmids={pmid_str}&concepts={concept_str}'
+              f'pmids={pmid_str}&concepts={concept_str}&api_key=326042ba82c2800f8fcf63717f14d8063708'
         cont = repeat_request(url)
         for js in cont.split('\n'):
             if len(js.strip()) == 0:
                 continue
-            doc = json.loads(js)
+            doc = None
+            try:
+                doc = json.loads(js)
+            except Exception as err:
+                print(file=err_log_global)
+                print(type(err), err, file=err_log_global)
+                print('json error:', url, js, file=err_log_global)
+            if doc is None:
+                continue
             passages = doc['passages']
             title = ''
             texts = []
@@ -150,7 +173,7 @@ def search_get_pubmed(entities: list, pmid_filter: set = None, ent_pair: tuple =
     if pmid_filter is not None:
         # 过滤已知包含正例的文章
         id_list = [pid for pid in id_list if int(pid) not in pmid_filter]
-    ret = get_pmids(id_list)
+    ret, ret_null = get_pmids(id_list), []
     if ent_pair is not None:
         # 过滤不包含这两个实体的文章
         tmp_ret = {}
@@ -168,8 +191,10 @@ def search_get_pubmed(entities: list, pmid_filter: set = None, ent_pair: tuple =
                     t_in = True
             if h_in and t_in:
                 tmp_ret[did] = info
+            else:
+                ret_null.append(info)
         ret = tmp_ret
-    return ret
+    return ret, ret_null
 
 
 def print_json(obj):
@@ -244,7 +269,8 @@ def pubtator_to_docred(doc, labels):
         if entity['infons']['type'] not in ('Chemical', 'Disease'):
             continue
         cid = entity['infons']['identifier']
-        if cid is None:
+        # filter unlinked entities
+        if cid is None or cid == '-':
             continue
         name = entity['text']
         for loc in entity['locations']:
@@ -430,7 +456,7 @@ def main2():
                         continue
                     filter_set.add(int(pid))
             filter_set |= in_data_pmids
-            docs = search_get_pubmed(list(names), pmid_filter=filter_set, ent_pair=pair, ret_max=200)
+            docs = search_get_pubmed(list(names), pmid_filter=filter_set, ent_pair=pair, ret_max=200)[0]
             for did, val in docs.items():
                 try:
                     negative_doc_ids[did] = pubtator_to_docred(val, doc2labels[did] if did in doc2labels else [])
@@ -446,7 +472,74 @@ def main2():
     err_log.close()
 
 
+def get_mesh_id_to_name_extra():
+    mesh_to_name = load_json('CTDRED/mesh_id_to_name.json')
+    mesh_id_to_name_extra = {}
+    for part in ['train_mixed', 'dev', 'test', 'negative_train_mixed', 'negative_dev', 'negative_test',
+                 'negative_train_extra', 'negative_dev_extra', 'negative_test_extra', 'ctd_extra']:
+        data = load_json(f'CTDRED/{part}_binary_pos.json')
+        for doc in data:
+            assert len(doc['cids']) == len(doc['vertexSet'])
+            for cid, entity in zip(doc['cids'], doc['vertexSet']):
+                if cid not in mesh_to_name:
+                    mesh_id_to_name_extra[cid] = max([n['name'] for n in entity], key=lambda x: len(x))
+        del data
+    save_json(mesh_id_to_name_extra, 'CTDRED/mesh_id_to_name_extra.json')
+
+
+err_log_global = sys.stderr
+
+
 def main3():
+    """基于 pair_to_docs 分批次爬取数据"""
+    global err_log_global
+    pair_to_docs = load_json('CTDRED/pair_to_docs.json')
+    batch_sz, batch_id = 123559, 0
+    pair_to_docs = list(pair_to_docs.items())[(batch_id*batch_sz):((batch_id+1)*batch_sz)]
+    mesh_to_name = load_json('CTDRED/mesh_id_to_name.json')
+    mesh_to_name.update(load_json('CTDRED/mesh_id_to_name_extra.json'))
+    doc2labels = {key: tuple(value) for key, value in load_json('CTDRED/ctd_doc_to_labels.json').items()}
+    got_pmids, pair_cnt, cur_comp_pair, cur_comp_doc = set(), len(pair_to_docs), 0, 0
+    err_log_global = open(f'CTDRED/err_log{batch_id}.txt', 'w', encoding='utf-8')
+    fout = jsonlines.open(f'CTDRED/extra_batch{batch_id}.jsonl', 'a')
+    start_time = timer()
+    for pair, docs in pair_to_docs:
+        h, t = pair.split('&')
+        h_name, t_name = mesh_to_name[h], mesh_to_name[t]
+        for pmid in docs[0] + docs[1]:
+            got_pmids.add(pmid)
+        got_docs = None
+        for _ in range(3):
+            try:
+                got_docs = search_get_pubmed(list([h_name, t_name]),
+                                             pmid_filter=got_pmids, ent_pair=(h, t), ret_max=100)[0]
+            except Exception as err:
+                print(file=err_log_global)
+                traceback.print_exception(type(err), err, sys.exc_info()[2], file=err_log_global)
+                time.sleep(5)
+        if got_docs is None:
+            continue
+        for did, val in got_docs.items():
+            assert int(did) not in got_pmids
+            try:
+                val_res = pubtator_to_docred(val, doc2labels[did] if did in doc2labels else [])
+                fout.write(val_res)
+            except Exception as err:
+                err_log_global.write(did + '\n')
+                traceback.print_exception(type(err), err, sys.exc_info()[2], file=err_log_global)
+                err_log_global.write('============\n')
+            got_pmids.add(int(did))
+            cur_comp_doc += 1
+        cur_comp_pair += 1
+        time_spent = timer() - start_time
+        print(f'complete {cur_comp_pair:7}/{pair_cnt:7} documents: {cur_comp_doc:9}'
+              f' {time_to_str(time_spent)}/{time_to_str(time_spent*(pair_cnt-cur_comp_pair)/cur_comp_pair)}', end='\r')
+        print(f'complete {cur_comp_pair:7}/{pair_cnt:7}', file=err_log_global)
+    fout.close()
+    err_log_global.close()
+
+
+def main4():
     # test0 182030 182030
     # dev0 174699 97400
     # train_mixed1 168930 71208
@@ -675,7 +768,7 @@ def temp_func():
         # negative_test [1636, 757, 81] 56652 1712
     exit()
 
-    # result = search_get_pubmed(['Naloxone', 'clonidine'])
+    # result = search_get_pubmed(['Naloxone', 'clonidine'])[0]
     # pubtator_to_docred(list(result.values())[0])
     # exit()
     # main1()
@@ -902,4 +995,5 @@ def temp_func():
 if __name__ == '__main__':
     # main2()
     # add_ctd_not_included()
+    # get_mesh_id_to_name_extra()
     main3()

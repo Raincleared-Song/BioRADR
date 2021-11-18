@@ -3,9 +3,9 @@ from .config_base import ConfigBase
 
 class ConfigDenoise(ConfigBase):
     data_path = {
-        'train': 'CTDRED/train_mixed_binary_pos.json',
-        'valid': 'CTDRED/dev_binary_pos.json',
-        'test': 'CTDRED/test_binary_pos.json'
+        'train': 'CDR/train_cdr_ctd_pos.json',
+        'valid': 'CDR/dev_cdr_ctd_pos.json',
+        'test': 'CDR/test_cdr_ctd_pos.json'
     }
     # data_path = {
     #     'train': 'CTDRED/train_mixed.json',
@@ -56,7 +56,7 @@ class ConfigDenoise(ConfigBase):
     block_size = 64
 
     optimizer = 'adamw'
-    learning_rate = 3e-5
+    learning_rate = 1e-5
     weight_decay = 0
     adam_epsilon = 1e-6
     warmup_ratio = 0.06
@@ -65,7 +65,7 @@ class ConfigDenoise(ConfigBase):
     output_step = 1
     test_step = 1
     model_path = 'checkpoint'
-    model_name = 'ctd_binary_denoise_n15_inter'
+    model_name = 'ctd_cdr_atloss_p128_n1'
     fp16 = False
     lr_step_size = 1  # step_size
     lr_gamma = 1
@@ -74,6 +74,7 @@ class ConfigDenoise(ConfigBase):
     kept_pair_num = None
     use_type_marker = True
 
-    positive_num = 16
-    negative_num = 15
+    positive_num = 128
+    negative_num = 1
     use_inter = True
+    use_at_loss = True

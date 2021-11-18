@@ -169,6 +169,7 @@ def get_pmids(pmids: list, concepts: list = None):
 
 
 def search_get_pubmed(entities: list, pmid_filter: set = None, ent_pair: tuple = None, ret_max: int = 100):
+    entities = [f'"{ent}"' for ent in entities]
     id_list = search_term(' '.join(entities), db='pubmed', ret_max=ret_max)
     if pmid_filter is not None:
         # 过滤已知包含正例的文章
@@ -501,7 +502,7 @@ def main3():
     doc2labels = {key: tuple(value) for key, value in load_json('CTDRED/ctd_doc_to_labels.json').items()}
     got_pmids, pair_cnt, cur_comp_pair, cur_comp_doc = set(), len(pair_to_docs), 0, 0
     err_log_global = open(f'CTDRED/err_log{batch_id}.txt', 'w', encoding='utf-8')
-    fout = jsonlines.open(f'CTDRED/extra_batch{batch_id}.jsonl', 'a')
+    fout = jsonlines.open(f'CTDRED/extra_batch{batch_id}.jsonl', 'a', flush=True)
     start_time = timer()
     for pair, docs in pair_to_docs:
         h, t = pair.split('&')

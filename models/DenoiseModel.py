@@ -4,6 +4,7 @@ from .long_input import process_long_input
 from config import ConfigDenoise as Config
 from transformers import BertModel
 from utils import eval_softmax
+from .ATLoss import BinaryATLoss
 
 
 class DenoiseModel(nn.Module):
@@ -19,7 +20,7 @@ class DenoiseModel(nn.Module):
         self.bilinear = nn.Linear(self.bert_hidden * self.block_size, self.rep_hidden)
         self.linear_out = nn.Linear(self.rep_hidden, 1)
 
-        self.loss = nn.CrossEntropyLoss(ignore_index=-100)
+        self.loss = BinaryATLoss() if Config.use_at_loss else nn.CrossEntropyLoss(ignore_index=-100)
 
     def forward(self, data, mode: str, eval_res: dict = None):
         if mode != 'test':
@@ -28,21 +29,6 @@ class DenoiseModel(nn.Module):
             return self.forward_test(data, mode, eval_res)
 
     def forward_test(self, data, mode: str, eval_res: dict = None):
-        """
-            documents torch.Size([4, 512])
-            attn_mask torch.Size([4, 512])
-            word_pos torch.Size([4, 42, 3])
-            head_ids torch.Size([4, 3, 6])
-            tail_ids torch.Size([4, 3, 6])
-            labels torch.Size([4, 3])
-
-            documents torch.Size([4, 512])
-            attn_mask torch.Size([4, 512])
-            word_pos torch.Size([4, 42, 3])
-            head_ids torch.Size([4, 16, 8])
-            tail_ids torch.Size([4, 16, 8])
-            labels torch.Size([4, 16])
-        """
         assert mode == 'test'
 
         documents = data['documents']
@@ -127,14 +113,15 @@ class DenoiseModel(nn.Module):
 
         # constants
         batch_size = document1.shape[0]
-        entity_lim, mention_lim = positions1.shape[1], positions1.shape[2]
+        entity_lim1, entity_lim2, mention_lim = positions1.shape[1], positions2.shape[1], positions1.shape[2]
 
         doc_hidden1 = process_long_input(self.bert, document1, attn_mask1, Config)
         doc_hidden2 = process_long_input(self.bert, document2, attn_mask2, Config)
 
-        indices = torch.arange(0, batch_size).view(batch_size, 1, 1).repeat(1, entity_lim, mention_lim)
-        rep_ent1 = doc_hidden1[indices, positions1].view(batch_size, entity_lim, mention_lim, self.bert_hidden)
-        rep_ent2 = doc_hidden2[indices, positions2].view(batch_size, entity_lim, mention_lim, self.bert_hidden)
+        indices1 = torch.arange(0, batch_size).view(batch_size, 1, 1).repeat(1, entity_lim1, mention_lim)
+        rep_ent1 = doc_hidden1[indices1, positions1].view(batch_size, entity_lim1, mention_lim, self.bert_hidden)
+        indices2 = torch.arange(0, batch_size).view(batch_size, 1, 1).repeat(1, entity_lim2, mention_lim)
+        rep_ent2 = doc_hidden2[indices2, positions2].view(batch_size, entity_lim2, mention_lim, self.bert_hidden)
 
         rep_ent1 = torch.max(rep_ent1, dim=2)[0]
         rep_ent2 = torch.max(rep_ent2, dim=2)[0]
@@ -153,7 +140,7 @@ class DenoiseModel(nn.Module):
         return {'loss': total_loss, 'eval_res': eval_res}
 
     def forward_rd(self, ent_rep, head_ids, tail_ids, label, eval_res):
-        batch_size, sample_size, negative_size = head_ids.shape
+        batch_size, sample_size, negative_size = head_ids.shape  # (1, 16, 16)
 
         indices = torch.arange(0, batch_size).view(batch_size, 1, 1).repeat(1, sample_size, negative_size)
         head_rep = ent_rep[indices, head_ids].view(batch_size, sample_size, negative_size, self.bert_hidden)
@@ -167,7 +154,7 @@ class DenoiseModel(nn.Module):
                                                                        self.bert_hidden * self.block_size)
         rel_rep = self.bilinear(rel_rep)
 
-        score = self.linear_out(rel_rep).squeeze(3).view(-1, negative_size)
+        score = self.linear_out(rel_rep).squeeze(3).view(-1, negative_size)  # (16, 16)
         label = label.view(-1)
         loss = self.loss(score, label)
         eval_res['RD'] = eval_softmax(score, label, eval_res['RD'])
@@ -175,7 +162,7 @@ class DenoiseModel(nn.Module):
         return loss, eval_res
 
     def forward_rd_x(self, ent_rep1, ent_rep2, head1, head2, tail1, tail2, label, eval_res):
-        batch_size, sample_size, negative_size = head1.shape
+        batch_size, sample_size, negative_size = head1.shape  # (1, 16, 8)
 
         indices = torch.arange(0, batch_size).view(batch_size, 1, 1).repeat(1, sample_size, negative_size)
         head_rep1 = ent_rep1[indices, head1].view(batch_size, sample_size, negative_size, self.bert_hidden)
@@ -199,10 +186,10 @@ class DenoiseModel(nn.Module):
                                                                           self.bert_hidden * self.block_size)
         rel_rep2 = self.bilinear(rel_rep2)
 
-        score1 = self.linear_out(rel_rep1).squeeze(3)
-        score2 = self.linear_out(rel_rep2).squeeze(3)
+        score1 = self.linear_out(rel_rep1).squeeze(3)  # (1, 16, 8)
+        score2 = self.linear_out(rel_rep2).squeeze(3)  # (1, 16, 8)
 
-        score = torch.cat((score1, score2), dim=2).view(-1, negative_size << 1)
+        score = torch.cat((score1, score2), dim=2).view(-1, negative_size << 1)  # (16, 16)
         label = label.view(-1)
         loss = self.loss(score, label)
         eval_res['RD_X'] = eval_softmax(score, label, eval_res['RD_X'])

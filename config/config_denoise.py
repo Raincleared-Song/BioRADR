@@ -3,10 +3,15 @@ from .config_base import ConfigBase
 
 class ConfigDenoise(ConfigBase):
     data_path = {
-        'train': 'CDR/train_cdr_ctd_pos.json',
-        'valid': 'CDR/dev_cdr_ctd_pos.json',
-        'test': 'CDR/test_cdr_ctd_pos.json'
+        'train': '../project-1/CDR/train_cdr_ctd_pos.json',
+        'valid': '../project-1/CDR/dev_cdr_ctd_pos.json',
+        'test': '../project-1/CDR/test_cdr_ctd_pos.json'
     }
+    # data_path = {
+    #     'train': '../project-1/CTDRED/train_mixed_binary_pos.json',
+    #     'valid': '../project-1/CTDRED/dev_binary_pos.json',
+    #     'test': '../project-1/CTDRED/test_binary_pos.json'
+    # }
     # data_path = {
     #     'train': 'CTDRED/train_mixed.json',
     #     'valid': 'CTDRED/dev.json',
@@ -51,7 +56,7 @@ class ConfigDenoise(ConfigBase):
     # test_sample_limit = 162  # #chemical * #gene
     do_validation = True
     use_gpu = True
-    gpu_device = 'cuda:0'
+    gpu_device = 'cuda:7'
     hidden_size = 256
     block_size = 64
 
@@ -65,7 +70,7 @@ class ConfigDenoise(ConfigBase):
     output_step = 1
     test_step = 1
     model_path = 'checkpoint'
-    model_name = 'ctd_cdr_atloss_p128_n1'
+    model_name = 'ctd_cdr_contrastive_00_00_00_mrloss'
     fp16 = False
     lr_step_size = 1  # step_size
     lr_gamma = 1
@@ -77,4 +82,11 @@ class ConfigDenoise(ConfigBase):
     positive_num = 128
     negative_num = 1
     use_inter = True
-    use_at_loss = True
+    negative_lambda = 0.25
+
+    similar_rate = 0.0  # similar samples / all samples
+    similar_pos_rate = 0.0  # positive similar samples / all similar samples
+    similar_loss_lambda = 0.0  # similar_loss / dissimilar_loss
+
+    loss_func = 'contrastive'
+    assert loss_func in ['contrastive', 'adaptive_threshold', 'cross_entropy']

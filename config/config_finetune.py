@@ -9,12 +9,12 @@ class ConfigFineTune(ConfigBase):
     #     'test': 'CTDRED/test.json'
     # }
     data_path = {
-        'train': 'CTDRED/train_mixed_binary_pos.json',
-        'valid': 'CTDRED/dev_binary_pos.json',
-        'test': 'CTDRED/test_binary_pos.json',
-        'negative_train': 'CTDRED/negative_train_mixed_binary_pos.json',
-        'negative_valid': 'CTDRED/negative_dev_binary_pos.json',
-        'negative_test': 'CTDRED/negative_test_binary_pos.json'
+        'train': '../project-1/CTDRED/train_mixed_binary_pos.json',
+        'valid': '../project-1/CTDRED/dev_binary_pos.json',
+        'test': '../project-1/CTDRED/test_binary_pos.json',
+        'negative_train': '../project-1/CTDRED/negative_train_mixed_binary_pos.json',
+        'negative_valid': '../project-1/CTDRED/negative_dev_binary_pos.json',
+        'negative_test': '../project-1/CTDRED/negative_test_binary_pos.json'
     }
     # data_path = {
     #     'train': 'CDR/train_cdr.json',

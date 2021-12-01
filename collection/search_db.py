@@ -1,6 +1,5 @@
 import json
-from tqdm import tqdm
-from search_utils import load_json
+from search_utils import adaptive_load
 from peewee import IntegerField, TextField, AutoField, Model, SqliteDatabase, chunked
 
 
@@ -25,15 +24,22 @@ def init_db():
 
 def dump_data():
     for part in ['train_mixed', 'dev', 'test', 'negative_train_mixed', 'negative_dev', 'negative_test',
-                 'negative_train_extra', 'negative_dev_extra', 'negative_test_extra', 'ctd_extra']:
-        data = load_json(f'CTDRED/{part}_binary_pos.json')
-        to_insert = [(doc['pmid'], json.dumps(doc)) for doc in data]
-        with db.atomic():
-            pbar = tqdm(range(len(to_insert) // 100 + 1), desc=part)
-            for batch in chunked(to_insert, 100):
-                Documents.insert_many(batch, fields=[Documents.pmid, Documents.content]).execute()
-                pbar.update()
-            pbar.close()
+                 'negative_train_extra', 'negative_dev_extra', 'negative_test_extra', 'ctd_extra', 'extra_batch']:
+        data = adaptive_load(f'CTDRED/{part}_binary_pos')
+        cur_batch, cur_cnt = [], 0
+        for doc in data:
+            cur_batch.append((doc['pmid'], json.dumps(doc)))
+            if len(cur_batch) == 100:
+                with db.atomic():
+                    Documents.insert_many(cur_batch, fields=[Documents.pmid, Documents.content]).execute()
+                cur_cnt += len(cur_batch)
+                cur_batch = []
+                print(f'{part} processed: {cur_cnt:07}', end='\r')
+        if len(cur_batch) > 0:
+            with db.atomic():
+                Documents.insert_many(cur_batch, fields=[Documents.pmid, Documents.content]).execute()
+            cur_cnt += len(cur_batch)
+        print(f'{part} processed: {cur_cnt:07}')
         del data
 
 

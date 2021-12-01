@@ -2,10 +2,13 @@ import sys
 import csv
 import time
 import json
+import random
+import hashlib
 import xml.sax
 import requests
 import traceback
 import jsonlines
+from typing import Union, List, Tuple
 from timeit import default_timer as timer
 from requests.exceptions import ReadTimeout, ConnectionError
 
@@ -206,6 +209,37 @@ def is_mesh_id(cid: str):
     return cid[0].isalpha() and cid[1:].isdigit()
 
 
+def baidu_translate(sent: Union[List[str], str]) -> Tuple[Union[List[str], str], int]:
+    url = 'https://fanyi-api.baidu.com/api/trans/vip/fieldtranslate'
+    is_list = isinstance(sent, list)
+    q = '\n'.join(sent) if is_list else sent
+    from_ = 'en'
+    to_ = 'zh'
+    appid = '20211130001014371'
+    key = '4qtu3HA9NHzrB2m_GBdd'
+    salt = str(random.randint(32768, 65536))
+    domain = 'medicine'
+    sign = hashlib.md5((appid + q + salt + domain + key).encode()).hexdigest()
+    payload = {
+        'q': q, 'from': from_, 'to': to_, 'appid': appid, 'salt': salt, 'domain': domain, 'sign': sign
+    }
+    header = {
+        'Content-Type': 'application/x-www-form-urlencoded'
+    }
+    res = {}
+    try:
+        res = requests.post(url, data=payload, headers=header)
+        res = json.loads(res.text)
+        if is_list:
+            return [item['dst'] for item in res['trans_result']], len(q)
+        else:
+            return res['trans_result'][0]['dst'], len(q)
+    except Exception as err:
+        print(sent)
+        print(res)
+        raise err
+
+
 def main1():
     """生成 CTD 关系"""
     rel2id = {'therapeutic': 1, 'marker/mechanism': 0}
@@ -260,10 +294,8 @@ def main1():
     save_json(doc2labels, 'CTDRED/ctd_doc_to_labels_complete.json')
 
 
-mesh_convert = load_json('CTDRED/mesh_convert.json')
-
-
 def pubtator_to_docred(doc, labels):
+    mesh_convert = load_json('CTDRED/mesh_convert.json')
     offsets = []
     eid2offsets = {}
     for entity in doc['entities']:
@@ -504,7 +536,7 @@ def main3():
     err_log_global = open(f'CTDRED/err_log{batch_id}.txt', 'w', encoding='utf-8')
     fout = jsonlines.open(f'CTDRED/extra_batch{batch_id}.jsonl', 'a', flush=True)
     start_time = timer()
-    for pair, docs in pair_to_docs:
+    for pair, docs in pair_to_docs[cur_comp_pair:]:
         h, t = pair.split('&')
         h_name, t_name = mesh_to_name[h], mesh_to_name[t]
         for pmid in docs[0] + docs[1]:
@@ -731,6 +763,50 @@ def add_null_labels(binary=False):
         save_json(data, f'CTDRED/{path}_{"binary2" if binary else "null"}.json')
         after_instances = sum(len(doc['labels']) for doc in data)
         print(path, total_instances, after_instances)
+
+
+def main5():
+    """clean jsonlines data"""
+    pmid_set = set()
+    for part in ['train_mixed', 'dev', 'test', 'negative_train_mixed', 'negative_dev', 'negative_test',
+                 'negative_train_extra', 'negative_dev_extra', 'negative_test_extra', 'ctd_extra']:
+        data = load_json(f'CTDRED/{part}_binary_pos.json')
+        for doc in data:
+            assert doc['pmid'] not in pmid_set and type(doc['pmid']) == int
+            pmid_set.add(doc['pmid'])
+        del data
+    fout = jsonlines.open('CTDRED/extra_batch_total.jsonl', 'w')
+    for idx in range(10):
+        fin = jsonlines.open(f'CTDRED/extra_batch{idx}.jsonl', 'r')
+        cur_cnt = 0
+        for data in fin:
+            pmid = data['pmid']
+            if pmid not in pmid_set:
+                pmid_set.add(pmid)
+                fout.write(data)
+            cur_cnt += 1
+            print(f'{idx:02} processed: {cur_cnt:06} documents, have {len(pmid_set):06} documents', end='\r')
+        fin.close()
+        print()
+    fout.close()
+
+
+def get_ent_counts():
+    mesh_id_to_counts = {}
+    mesh_id_to_pmids = {}
+    pair_to_docs = load_json('CTDRED/pair_to_docs.json')
+    for pair, val in pair_to_docs.items():
+        h, t = pair.split('&')
+        mesh_id_to_pmids.setdefault(h, set())
+        mesh_id_to_pmids.setdefault(t, set())
+        for pmid in (val[0] + val[1]):
+            mesh_id_to_pmids[h].add(pmid)
+            mesh_id_to_pmids[t].add(pmid)
+    for k, v in mesh_id_to_pmids.items():
+        mesh_id_to_pmids[k] = list(v)
+        mesh_id_to_counts[k] = len(v)
+    save_json(mesh_id_to_pmids, 'CTDRED/mesh_id_to_pmids.json')
+    save_json(mesh_id_to_counts, 'CTDRED/mesh_id_to_counts.json')
 
 
 def temp_func():
@@ -994,7 +1070,9 @@ def temp_func():
 
 
 if __name__ == '__main__':
+    # get_ent_counts()
     # main2()
     # add_ctd_not_included()
     # get_mesh_id_to_name_extra()
-    main3()
+    # main3()
+    main5()

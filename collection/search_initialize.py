@@ -9,11 +9,10 @@ from search_model import SearchRankModel
 from search_preprocess import process_denoise
 
 
-def init_arg_model():
-    args = init_args()
+def init_model(args):
     init_seed(args.seed)
     model = init_models(args)
-    return args, model
+    return model
 
 
 def init_args():

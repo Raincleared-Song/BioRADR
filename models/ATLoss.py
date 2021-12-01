@@ -1,6 +1,7 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from config import ConfigDenoise as Config
 
 
 class BinaryATLoss(nn.Module):
@@ -40,4 +41,4 @@ class BinaryATLoss(nn.Module):
         logit2 = scores + p_mask * self.minus_mask
         loss2 = -(F.log_softmax(logit2, dim=2) * th_mask).sum()
 
-        return loss1 + loss2
+        return loss1 + Config.negative_lambda * loss2

@@ -7,7 +7,7 @@ import numpy as np
 from torch.autograd import Variable
 from ncbi_api import spell_term, is_mesh_id, search_get_pubmed, pubtator_to_docred
 from search_utils import load_json, repeat_input
-from search_initialize import init_arg_model, init_data
+from search_initialize import init_args, init_model, init_data
 from scispacy.abbreviation import AbbreviationDetector
 from scispacy.linking import EntityLinker
 from search_db import init_db, get_documents_by_pmids
@@ -249,10 +249,12 @@ def process(entity1: str, entity2: str):
 
 def init_all():
     global GLOBAL
+    args = init_args()
 
     # init scispacy
-    assert torch.cuda.is_available()
-    spacy.require_gpu(0)
+    if args.device.startswith('cuda:'):
+        assert torch.cuda.is_available()
+        spacy.require_gpu(int(args.device[5:]))
     nlp_init_err = None
     for _ in range(3):
         try:
@@ -269,7 +271,7 @@ def init_all():
         traceback.print_exception(type(nlp_init_err), nlp_init_err, sys.exc_info()[2])
         raise RuntimeError('scispacy initialize error')
 
-    args, model = init_arg_model()
+    model = init_model(args)
     GLOBAL['args'] = args
     GLOBAL['model'] = model
     init_db()
@@ -322,7 +324,48 @@ def main_loop():
                 for idx, (doc, score) in enumerate(result):
                     print(f'{idx:03}.')
                     print(doc['pmid'], score, sep='\t')
-                    print(doc['title'])
+                    print('---', doc['title'].strip())
+                    # print sentences
+                    cid2idx = {cid: i for i, cid in enumerate(doc['cids'])}
+                    mentions = []
+                    # 可能不包含全部两个实体 (API 补充)
+                    if cid1 in cid2idx:
+                        mentions += [(mention, 0) for mention in doc['vertexSet'][cid2idx[cid1]]]
+                    if cid2 in cid2idx:
+                        mentions += [(mention, 1) for mention in doc['vertexSet'][cid2idx[cid2]]]
+                    star_sents = {}
+                    for mention, eid in mentions:
+                        sid = mention['sent_id']
+                        if sid not in star_sents:
+                            star_sents[sid] = []
+                        star_sents[sid].append((mention['pos'], eid))
+                    for sid, sent in enumerate(doc['sents']):
+                        starts, ends = [{}, {}], [{}, {}]
+                        if sid in star_sents:
+                            print('***', end=' ')
+                            for pos, eid in star_sents[sid]:
+                                starts[eid].setdefault(pos[0], 0)
+                                starts[eid][pos[0]] = starts[eid][pos[0]] + 1
+                                ends[eid].setdefault(pos[1], 0)
+                                ends[eid][pos[1]] = ends[eid][pos[1]] + 1
+                        tokens = []
+                        sent.append('')
+                        for tid, token in enumerate(sent):
+                            # head entity: [[/]], tail entity <</>>
+                            if tid in ends[0]:
+                                tokens += [']]' for _ in range(ends[0][tid])]
+                            if tid in ends[1]:
+                                tokens += ['>>' for _ in range(ends[1][tid])]
+                            if tid in starts[0]:
+                                tokens += ['[[' for _ in range(starts[0][tid])]
+                            if tid in starts[1]:
+                                tokens += ['<<' for _ in range(starts[1][tid])]
+                            token = token.strip()
+                            if token != '':
+                                tokens.append(token)
+                        text = ' '.join(tokens)
+                        print(f'sent {sid}: {text}')
+                    print()
         except Exception as err:
             print(f'Something Error: [{entity1}] [{entity2}]', file=sys.stderr)
             traceback.print_exception(type(err), err, sys.exc_info()[2])

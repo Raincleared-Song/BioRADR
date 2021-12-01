@@ -8,6 +8,8 @@ stats/
 pretrain_models/
 Chemprot/
 CDR/
+manual/
+chosen_models/
 
 collect.py
 download.py

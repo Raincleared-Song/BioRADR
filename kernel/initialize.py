@@ -75,7 +75,8 @@ def init_seed(seed):
     global_loader_generator.manual_seed(seed)
     torch.backends.cudnn.deterministic = True
     torch.backends.cudnn.benchmark = False
-    torch.set_deterministic(True)
+    determine = torch.use_deterministic_algorithms if torch.__version__ == '1.10.0' else torch.set_deterministic
+    determine(True)
     os.environ['CUBLAS_WORKSPACE_CONFIG'] = ':16:8'
 
 

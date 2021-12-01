@@ -1,4 +1,6 @@
+import os
 import json
+import jsonlines
 
 
 def repeat_input(info: str, restrict=None, int_range=None):
@@ -28,3 +30,15 @@ def save_json(obj: object, path: str):
     file = open(path, 'w')
     json.dump(obj, file)
     file.close()
+
+
+def adaptive_load(path: str):
+    """
+    dynamic load json or jsonl files
+    :param path: prefix of the file
+    :return: an iterator
+    """
+    if os.path.exists(path + '.json'):
+        return iter(load_json(path + '.json'))
+    else:
+        return iter(jsonlines.open(path + '.jsonl', mode='r'))

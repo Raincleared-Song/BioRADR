@@ -39,7 +39,7 @@ class ConfigBase:
         'sgd': SGD
     }
     # rank_result_path = 'CTDRED/rank_result'  # CTDRED
-    rank_result_path = 'CTDRED/ctd_binary_denoise_n15_inter'  # CTDRED
+    rank_result_path = 'CTDRED/ctd_cdr_contrastive_00_00_00_mrloss_range'  # CTDRED
     # rank_result_path = 'Chemprot/rank_result_fr'  # Chemprot sent
     pair2triple_path = 'CTDRED/pair2triple.json'  # CTDRED
 

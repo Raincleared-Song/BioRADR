@@ -282,6 +282,37 @@ def process_intra_rank(data):
         label_ids = [-100] * sample_limit
         return head_ids, tail_ids, label_ids
 
+    if Config.loss_func == 'contrastive':
+        # contrastive learning
+        for i in range(sample_limit):
+            if random.random() < Config.similar_rate:
+                # similar samples
+                if len(positive_pairs) < 2:
+                    sample_from_pos = False
+                elif len(negative_pairs) < 2:
+                    sample_from_pos = True
+                else:
+                    sample_from_pos = random.random() < Config.similar_pos_rate
+                if sample_from_pos:
+                    # similar positive samples
+                    chosen_pairs = random.sample(positive_pairs, 2)
+                else:
+                    # similar negative samples
+                    chosen_pairs = random.sample(negative_pairs, 2)
+                head_ids.append([chosen_pairs[0][0], chosen_pairs[1][0]])
+                tail_ids.append([chosen_pairs[0][1], chosen_pairs[1][1]])
+                # 0 stands for similar
+                label_ids.append(0)
+            else:
+                # dissimilar samples
+                pos_pair = random.choice(positive_pairs)
+                neg_pair = random.choice(negative_pairs)
+                head_ids.append([pos_pair[0], neg_pair[0]])
+                tail_ids.append([pos_pair[1], neg_pair[1]])
+                # -1 stands for dissimilar (pos is ahead)
+                label_ids.append(-1)
+        return head_ids, tail_ids, label_ids
+
     for i in range(sample_limit):
         head_ids.append([])
         tail_ids.append([])
@@ -306,6 +337,42 @@ def process_inter_rank(data1, data2):
     if len(positive_pairs1) == 0 or len(positive_pairs2) == 0:
         head_ids1 = head_ids2 = tail_ids1 = tail_ids2 = [[0] * half_sample_num] * 3
         label_ids = [-100] * 3
+        return head_ids1, tail_ids1, head_ids2, tail_ids2, label_ids
+
+    if Config.loss_func == 'contrastive':
+        # contrastive learning
+        for i in range(Config.positive_num):
+            if random.random() < Config.similar_rate:
+                # similar samples (inter)
+                if random.random() < Config.similar_pos_rate:
+                    # similar positive samples (inter)
+                    chosen_pair1 = random.choice(positive_pairs1)
+                    chosen_pair2 = random.choice(positive_pairs2)
+                else:
+                    chosen_pair1 = random.choice(negative_pairs1)
+                    chosen_pair2 = random.choice(negative_pairs2)
+                head_ids1.append([chosen_pair1[0]])
+                tail_ids1.append([chosen_pair1[1]])
+                head_ids2.append([chosen_pair2[0]])
+                tail_ids2.append([chosen_pair2[1]])
+                # 0 stands for similar
+                label_ids.append(0)
+            else:
+                # dissimilar samples
+                if random.random() < 0.5:
+                    chosen_pair1 = random.choice(positive_pairs1)
+                    chosen_pair2 = random.choice(negative_pairs2)
+                    # -1 stands for dissimilar (pos is ahead)
+                    label_ids.append(-1)
+                else:
+                    chosen_pair1 = random.choice(negative_pairs1)
+                    chosen_pair2 = random.choice(positive_pairs2)
+                    # 1 stands for dissimilar (neg is ahead)
+                    label_ids.append(1)
+                head_ids1.append([chosen_pair1[0]])
+                tail_ids1.append([chosen_pair1[1]])
+                head_ids2.append([chosen_pair2[0]])
+                tail_ids2.append([chosen_pair2[1]])
         return head_ids1, tail_ids1, head_ids2, tail_ids2, label_ids
 
     for i in range(Config.positive_num):

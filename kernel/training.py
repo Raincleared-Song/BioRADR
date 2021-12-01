@@ -72,6 +72,7 @@ def train(config: ConfigBase, models, datasets, it=None):
         time_spent = 0
         metric_json = ''
         train_steps = config.train_steps
+        determine = torch.use_deterministic_algorithms if torch.__version__ == '1.10.0' else torch.set_deterministic
 
         assert len(train_set) > 0
 
@@ -95,9 +96,9 @@ def train(config: ConfigBase, models, datasets, it=None):
                 with amp.scale_loss(loss, optimizer) as scaled_loss:
                     scaled_loss.backward()
             else:
-                torch.set_deterministic(False)
+                determine(False)
                 loss.backward()
-                torch.set_deterministic(True)
+                determine(True)
             time_tag(13, True)
 
             if step % train_steps == 0:

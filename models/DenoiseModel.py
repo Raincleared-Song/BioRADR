@@ -5,6 +5,14 @@ from config import ConfigDenoise as Config
 from transformers import BertModel
 from utils import eval_softmax
 from .ATLoss import BinaryATLoss
+from .ContrastiveLoss import ContrastiveLoss
+
+
+loss_map = {
+    'cross_entropy': nn.CrossEntropyLoss,
+    'adaptive_threshold': BinaryATLoss,
+    'contrastive': ContrastiveLoss,
+}
 
 
 class DenoiseModel(nn.Module):
@@ -20,7 +28,7 @@ class DenoiseModel(nn.Module):
         self.bilinear = nn.Linear(self.bert_hidden * self.block_size, self.rep_hidden)
         self.linear_out = nn.Linear(self.rep_hidden, 1)
 
-        self.loss = BinaryATLoss() if Config.use_at_loss else nn.CrossEntropyLoss(ignore_index=-100)
+        self.loss = loss_map[Config.loss_func]()
 
     def forward(self, data, mode: str, eval_res: dict = None):
         if mode != 'test':

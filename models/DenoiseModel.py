@@ -6,12 +6,15 @@ from transformers import BertModel
 from utils import eval_softmax
 from .ATLoss import BinaryATLoss
 from .ContrastiveLoss import ContrastiveLoss
+from .LogExpLoss import LogExpLoss
 
 
 loss_map = {
     'cross_entropy': nn.CrossEntropyLoss,
     'adaptive_threshold': BinaryATLoss,
-    'contrastive': ContrastiveLoss,
+    'contrastive_mrl': ContrastiveLoss,
+    'contrastive_sml': ContrastiveLoss,
+    'log_exp': LogExpLoss,
 }
 
 

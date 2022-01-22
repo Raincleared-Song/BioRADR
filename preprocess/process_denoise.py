@@ -1,6 +1,7 @@
 import random
 import torch
 from config import ConfigDenoise as Config
+from .document_crop import document_crop, sentence_mention_crop
 
 
 use_cp: bool = False
@@ -19,6 +20,7 @@ def process_denoise_test(data, mode: str):
     global use_cp
     use_cp = 'chemprot' in Config.data_path[mode].lower()
     documents, attn_masks, word_positions, head_ids, tail_ids, pos_ids, titles = [], [], [], [], [], [], []
+    pmid_key = 'pmid' if len(data) > 0 and 'pmid' in data[0] else 'pmsid'
     for doc in data:
         document, attn_mask, position = process_document(doc, mode)
         documents.append(document)
@@ -41,7 +43,7 @@ def process_denoise_test(data, mode: str):
                          entities[i][0]['type'] == 'Chemical' and entities[j][0]['type'] == 'Disease']
             head_ids.append([pair[0] for pair in pairs])
             tail_ids.append([pair[1] for pair in pairs])
-            titles.append(int(doc['pmid']))
+            titles.append(doc[pmid_key])
         else:
             head_id, tail_id, pos_id = process_rank(doc)
             head_ids.append(head_id)
@@ -84,17 +86,29 @@ def process_denoise_test(data, mode: str):
 
 
 def process_document(data, mode: str):
+    if Config.crop_documents:
+        document_crop(data)
+    sentence_mention_crop(data, mode, Config.crop_mention_option)
     sentences = [[Config.tokenizer.tokenize(word) for word in sent] for sent in data['sents']]
 
     entities = data['vertexSet']
     for i, mentions in enumerate(entities):
         for mention in mentions:
-            tmp: list = sentences[mention['sent_id']][mention['pos'][0]]
-            if Config.use_type_marker:
-                sentences[mention['sent_id']][mention['pos'][0]] = \
-                    [f'[unused{(i << 1) + 1}]', mention['type'], '*'] + tmp
+            if Config.entity_marker_type != 't':
+                tmp: list = sentences[mention['sent_id']][mention['pos'][0]]
+                if Config.entity_marker_type == 'mt':
+                    # both mention and type
+                    sentences[mention['sent_id']][mention['pos'][0]] = \
+                        [f'[unused{(i << 1) + 1}]', mention['type'], '*'] + tmp
+                else:
+                    # Config.entity_marker_type == 'm', only mention
+                    sentences[mention['sent_id']][mention['pos'][0]] = [f'[unused{(i << 1) + 1}]'] + tmp
             else:
-                sentences[mention['sent_id']][mention['pos'][0]] = [f'[unused{(i << 1) + 1}]'] + tmp
+                # Config.entity_marker_type == 't', blank all mention, only type
+                for pos in range(mention['pos'][0], mention['pos'][1]):
+                    sentences[mention['sent_id']][pos] = []
+                sentences[mention['sent_id']][mention['pos'][0]] = \
+                    [f'[unused{(i << 1) + 1}]', mention['type'], '*', '[unused0]']
             sentences[mention['sent_id']][mention['pos'][1] - 1].append(f'[unused{(i + 1) << 1}]')
 
     word_position, document = [], ['[CLS]']
@@ -282,35 +296,16 @@ def process_intra_rank(data):
         label_ids = [-100] * sample_limit
         return head_ids, tail_ids, label_ids
 
-    if Config.loss_func == 'contrastive':
+    if Config.loss_func.startswith('contrastive'):
         # contrastive learning
         for i in range(sample_limit):
-            if random.random() < Config.similar_rate:
-                # similar samples
-                if len(positive_pairs) < 2:
-                    sample_from_pos = False
-                elif len(negative_pairs) < 2:
-                    sample_from_pos = True
-                else:
-                    sample_from_pos = random.random() < Config.similar_pos_rate
-                if sample_from_pos:
-                    # similar positive samples
-                    chosen_pairs = random.sample(positive_pairs, 2)
-                else:
-                    # similar negative samples
-                    chosen_pairs = random.sample(negative_pairs, 2)
-                head_ids.append([chosen_pairs[0][0], chosen_pairs[1][0]])
-                tail_ids.append([chosen_pairs[0][1], chosen_pairs[1][1]])
-                # 0 stands for similar
-                label_ids.append(0)
-            else:
-                # dissimilar samples
-                pos_pair = random.choice(positive_pairs)
-                neg_pair = random.choice(negative_pairs)
-                head_ids.append([pos_pair[0], neg_pair[0]])
-                tail_ids.append([pos_pair[1], neg_pair[1]])
-                # -1 stands for dissimilar (pos is ahead)
-                label_ids.append(-1)
+            # dissimilar samples
+            pos_pair = random.choice(positive_pairs)
+            neg_pair = random.choice(negative_pairs)
+            head_ids.append([pos_pair[0], neg_pair[0]])
+            tail_ids.append([pos_pair[1], neg_pair[1]])
+            # 1 stands for "pos is ahead of neg"
+            label_ids.append(1)
         return head_ids, tail_ids, label_ids
 
     for i in range(sample_limit):
@@ -339,40 +334,24 @@ def process_inter_rank(data1, data2):
         label_ids = [-100] * 3
         return head_ids1, tail_ids1, head_ids2, tail_ids2, label_ids
 
-    if Config.loss_func == 'contrastive':
+    if Config.loss_func.startswith('contrastive'):
         # contrastive learning
         for i in range(Config.positive_num):
-            if random.random() < Config.similar_rate:
-                # similar samples (inter)
-                if random.random() < Config.similar_pos_rate:
-                    # similar positive samples (inter)
-                    chosen_pair1 = random.choice(positive_pairs1)
-                    chosen_pair2 = random.choice(positive_pairs2)
-                else:
-                    chosen_pair1 = random.choice(negative_pairs1)
-                    chosen_pair2 = random.choice(negative_pairs2)
-                head_ids1.append([chosen_pair1[0]])
-                tail_ids1.append([chosen_pair1[1]])
-                head_ids2.append([chosen_pair2[0]])
-                tail_ids2.append([chosen_pair2[1]])
-                # 0 stands for similar
-                label_ids.append(0)
+            # dissimilar samples
+            if random.random() < 0.5:
+                chosen_pair1 = random.choice(positive_pairs1)
+                chosen_pair2 = random.choice(negative_pairs2)
+                # 1 stands for "pos is ahead of neg"
+                label_ids.append(1)
             else:
-                # dissimilar samples
-                if random.random() < 0.5:
-                    chosen_pair1 = random.choice(positive_pairs1)
-                    chosen_pair2 = random.choice(negative_pairs2)
-                    # -1 stands for dissimilar (pos is ahead)
-                    label_ids.append(-1)
-                else:
-                    chosen_pair1 = random.choice(negative_pairs1)
-                    chosen_pair2 = random.choice(positive_pairs2)
-                    # 1 stands for dissimilar (neg is ahead)
-                    label_ids.append(1)
-                head_ids1.append([chosen_pair1[0]])
-                tail_ids1.append([chosen_pair1[1]])
-                head_ids2.append([chosen_pair2[0]])
-                tail_ids2.append([chosen_pair2[1]])
+                chosen_pair1 = random.choice(negative_pairs1)
+                chosen_pair2 = random.choice(positive_pairs2)
+                # -1 stands for "neg is ahead of pos"
+                label_ids.append(-1)
+            head_ids1.append([chosen_pair1[0]])
+            tail_ids1.append([chosen_pair1[1]])
+            head_ids2.append([chosen_pair2[0]])
+            tail_ids2.append([chosen_pair2[1]])
         return head_ids1, tail_ids1, head_ids2, tail_ids2, label_ids
 
     for i in range(Config.positive_num):

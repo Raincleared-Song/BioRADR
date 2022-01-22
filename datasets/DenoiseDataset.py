@@ -15,9 +15,9 @@ class DenoiseDataset(Dataset):
             self.data = [item for item in self.data if len(item['labels']) != 0 and self.test_cp_negative(item)]
             random.shuffle(self.data)
         if mode != 'train':
-            self.total_len = 50 * config.batch_size[mode] * config.train_steps
+            self.total_len = 50 * config.batch_size[mode] * config.train_steps * config.dataset_multiplier
         else:
-            self.total_len = 100 * config.batch_size[mode] * config.train_steps
+            self.total_len = 100 * config.batch_size[mode] * config.train_steps * config.dataset_multiplier
 
     def __getitem__(self, item):
         doc1, doc2 = random.sample(self.data, 2)
@@ -37,6 +37,6 @@ class DenoiseDataset(Dataset):
                 num_g += 1
         total_num, pos_num = num_c * num_g, len([lab for lab in item['labels'] if lab['r'] != 'NA'])
         suc = total_num > pos_num
-        if self.Config.loss_func == 'contrastive':
+        if self.Config.loss_func.startswith('contrastive'):
             suc &= pos_num >= 2 or (total_num - pos_num) >= 2
         return suc

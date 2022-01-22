@@ -1,4 +1,3 @@
-import random
 from torch.utils.data import Dataset
 from config import task_to_config
 from utils import load_json
@@ -8,12 +7,11 @@ class FineTuneDataset(Dataset):
     def __init__(self, task: str, mode: str):
         config = task_to_config[task]
         self.data = load_json(config.data_path[mode])
-        if mode == 'train' or task != 'finetune' and mode == 'valid':
+        if mode == 'train':
             # abandon those data without labels
             self.data = [item for item in self.data if len(item['labels']) != 0]
             if task == 'denoise':
                 self.data = [item for item in self.data if self.test_cp_negative(item)]
-            random.shuffle(self.data)
         if mode == 'train' and task == 'finetune' and config.use_loss_weight:
             stat = load_json(config.stat_path)[config.use_stat]
             weights = [config.na_weight] * config.relation_num  # weight[id('NA')] = 1

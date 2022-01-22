@@ -1,8 +1,10 @@
+import os
 import torch
 from transformers import AutoTokenizer
 
 
-TOKENIZER = AutoTokenizer.from_pretrained('allenai/scibert_scivocab_cased')
+TOKENIZER = AutoTokenizer.from_pretrained('../huggingface/scibert_scivocab_cased' if os.path.exists(
+    '../huggingface/scibert_scivocab_cased') else 'allenai/scibert_scivocab_cased')
 CONFIG = {
     'use_type_marker': True,
     'token_padding': 1024,

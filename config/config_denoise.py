@@ -1,11 +1,12 @@
+import os
 from .config_base import ConfigBase
 
 
 class ConfigDenoise(ConfigBase):
     data_path = {
-        'train': '../project-1/CDR/train_cdr_ctd_pos.json',
-        'valid': '../project-1/CDR/dev_cdr_ctd_pos.json',
-        'test': '../project-1/CDR/test_cdr_ctd_pos.json'
+        'train': '../project-1/CTDRED/ctd_train.json',
+        'valid': '../project-1/CTDRED/ctd_dev.json',
+        'test': '../project-1/CTDRED/ctd_test.json'
     }
     # data_path = {
     #     'train': '../project-1/CTDRED/train_mixed_binary_pos.json',
@@ -28,8 +29,9 @@ class ConfigDenoise(ConfigBase):
         'test': 16
     }
 
-    reader_num = 5
-    bert_path = 'allenai/scibert_scivocab_cased'
+    reader_num = 8
+    bert_path = '../huggingface/scibert_scivocab_cased' if os.path.exists(
+        '../huggingface/scibert_scivocab_cased') else 'allenai/scibert_scivocab_cased'
     score_path = None
     token_padding = 1024  # token reserved for each document
     # token_padding = 448  # token reserved for each document, cps
@@ -56,7 +58,7 @@ class ConfigDenoise(ConfigBase):
     # test_sample_limit = 162  # #chemical * #gene
     do_validation = True
     use_gpu = True
-    gpu_device = 'cuda:7'
+    gpu_device = 'cuda:0'
     hidden_size = 256
     block_size = 64
 
@@ -66,27 +68,29 @@ class ConfigDenoise(ConfigBase):
     adam_epsilon = 1e-6
     warmup_ratio = 0.06
 
-    epoch_num = 120
+    epoch_num = 30
     output_step = 1
+    save_global_step = 800
+    crop_documents = False
+    crop_mention_option = 1
+    entity_marker_type = 't'
+    assert crop_mention_option in [0, 1, 2]
+    assert entity_marker_type in ['mt', 'm', 't']
     test_step = 1
     model_path = 'checkpoint'
-    model_name = 'ctd_cdr_contrastive_00_00_00_mrloss'
+    model_name = 'ctd_all_celoss_p16_n15_denoise_tpmk1_rep'
     fp16 = False
     lr_step_size = 1  # step_size
     lr_gamma = 1
     train_steps = 8
+    dataset_multiplier = 4
     output_metric = 'binary_metric'
     kept_pair_num = None
-    use_type_marker = True
 
-    positive_num = 128
-    negative_num = 1
+    positive_num = 16
+    negative_num = 15
     use_inter = True
-    negative_lambda = 0.25
+    negative_lambda = 1.0
 
-    similar_rate = 0.0  # similar samples / all samples
-    similar_pos_rate = 0.0  # positive similar samples / all similar samples
-    similar_loss_lambda = 0.0  # similar_loss / dissimilar_loss
-
-    loss_func = 'contrastive'
-    assert loss_func in ['contrastive', 'adaptive_threshold', 'cross_entropy']
+    loss_func = 'cross_entropy'
+    assert loss_func in ['contrastive_mrl', 'contrastive_sml', 'adaptive_threshold', 'cross_entropy', 'log_exp']

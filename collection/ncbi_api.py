@@ -127,7 +127,25 @@ def spell_term(term: str, db: str = 'mesh'):
     return handler.result
 
 
-def get_pmids(pmids: list, concepts: list = None):
+def pmid_to_pmcids(pmids: list, form: str = 'csv'):
+    """pmid 转 pmcid"""
+    ids = ','.join([str(pmid) for pmid in pmids])
+    url = f'https://www.ncbi.nlm.nih.gov/pmc/utils/idconv/v1.0/?tool=biodenoisere' \
+          f'&email=scy.raincleared@gmail.com&ids={ids}&format={form}'
+    cont = repeat_request(url)
+    lines = cont.split('\n')[1:]
+    result = {}
+    for line in lines:
+        if line == '':
+            continue
+        tokens = line.split(',')
+        pmid, pmcid = int(tokens[0].strip('"')), tokens[1].strip('"')
+        if pmcid != '':
+            result[pmid] = pmcid
+    return result
+
+
+def get_pmids(pmids: list, concepts: list = None, pmcid: bool = False):
     if len(pmids) == 0:
         return {}
     if concepts is None:
@@ -138,7 +156,8 @@ def get_pmids(pmids: list, concepts: list = None):
     while start < end and start < len(pmids):
         pmid_str = ','.join(pmids[start:end])
         url = f'https://www.ncbi.nlm.nih.gov/research/pubtator-api/publications/export/biocjson?' \
-              f'pmids={pmid_str}&concepts={concept_str}&api_key=326042ba82c2800f8fcf63717f14d8063708'
+              f'{"pmcids" if pmcid else "pmids"}={pmid_str}&concepts={concept_str}' \
+              f'&api_key=326042ba82c2800f8fcf63717f14d8063708'
         cont = repeat_request(url)
         for js in cont.split('\n'):
             if len(js.strip()) == 0:
@@ -155,29 +174,65 @@ def get_pmids(pmids: list, concepts: list = None):
             passages = doc['passages']
             title = ''
             texts = []
+            section_types = []
             annotations = []
-            if len(passages) > 0:
-                title = passages[0]['text']
+            accu_offset = 0
             for section in passages:
-                texts.append(section['text'])
-                annotations += section['annotations']
-            ret[doc['id']] = {
-                'pmid': doc['id'],
+                raw_text = section['text']
+                strip_text = raw_text.strip()
+                if len(strip_text) == 0:
+                    continue
+                if title == '':
+                    title = strip_text
+                l_pos = raw_text.find(strip_text[0])
+                assert l_pos != -1
+                sent_offset = section['offset'] + l_pos
+                section_types.append(section['infons']['section_type'])
+
+                if strip_text[-1] != '.':
+                    strip_text += ' .'
+                texts.append(strip_text)
+                new_anno = []
+                anno = section['annotations']
+                for entity in anno:
+                    new_loc = []
+                    for loc in entity['locations']:
+                        if loc['offset'] < section['offset']:
+                            continue
+                        loc['offset'] = loc['offset'] - sent_offset + accu_offset
+                        new_loc.append(loc)
+                    if len(new_loc) > 0:
+                        entity['locations'] = new_loc
+                        new_anno.append(entity)
+
+                accu_offset += len(strip_text) + 1
+                annotations += new_anno
+
+            pmid, pmcid = doc['_id'].split('|')
+            ret[pmid] = {
+                'pmid': pmid,
+                'pmcid': pmcid,
                 'title': title,
-                'text': ' '.join(texts),
+                'section_types': section_types,
+                'texts': texts,
                 'entities': annotations
             }
+        print(f'Got PubMed documents: {len(ret):04}/{len(pmids):04}', end='\r')
         start, end = end, end + 100
+    print()
     return ret
 
 
-def search_get_pubmed(entities: list, pmid_filter: set = None, ent_pair: tuple = None, ret_max: int = 100):
-    entities = [f'"{ent}"' for ent in entities]
-    id_list = search_term(' '.join(entities), db='pubmed', ret_max=ret_max)
+def search_get_pubmed(entities: list, pmid_filter: set = None, ent_pair: tuple = None,
+                      ret_max: int = 100, require_contain: bool = False, pmc: bool = False):
+    entities = [f'"{ent}"' if require_contain else ent for ent in entities]
+    id_list = search_term(' '.join(entities), db='pmc' if pmc else 'pubmed', ret_max=ret_max)
+    if pmc:
+        id_list = [f'PMC{idx}' for idx in id_list]
     if pmid_filter is not None:
         # 过滤已知包含正例的文章
-        id_list = [pid for pid in id_list if int(pid) not in pmid_filter]
-    ret, ret_null = get_pmids(id_list), []
+        id_list = [pid for pid in id_list if (pid if pmc else int(pid)) not in pmid_filter]
+    ret, ret_null = get_pmids(id_list, pmcid=pmc), []
     if ent_pair is not None:
         # 过滤不包含这两个实体的文章
         tmp_ret = {}
@@ -294,8 +349,13 @@ def main1():
     save_json(doc2labels, 'CTDRED/ctd_doc_to_labels_complete.json')
 
 
+mesh_convert = None
+
+
 def pubtator_to_docred(doc, labels):
-    mesh_convert = load_json('CTDRED/mesh_convert.json')
+    global mesh_convert
+    if mesh_convert is None:
+        mesh_convert = load_json('CTDRED/mesh_convert.json')
     offsets = []
     eid2offsets = {}
     for entity in doc['entities']:
@@ -317,7 +377,7 @@ def pubtator_to_docred(doc, labels):
                 eid2offsets[cid] = []
             eid2offsets[cid].append((off, off + le, entity['infons']['type'], name))
 
-    title, text = doc['title'], doc['text']
+    title, text = doc['title'], ' '.join(doc['texts'])
     offset_to_sid = [-1000000] * len(text)
 
     assert text[len(title)] == ' '
@@ -341,7 +401,7 @@ def pubtator_to_docred(doc, labels):
     for tid, token in enumerate(tokens):
         cur_sent.append(token)
         cur_sent_len_total += len(token) + 1
-        if token.endswith('.'):
+        if token.endswith('.') and (tid == len(tokens)-1 or len(tokens[tid+1]) == 0 or tokens[tid+1][0].isupper()):
             if len(token) == 2 or len(token) == 3 and token[0] == '(':
                 continue
 
@@ -399,7 +459,11 @@ def pubtator_to_docred(doc, labels):
                 if begin_pos >= 0 and left_pos < end <= right_pos:
                     end_pos = k + 1
                     break
-            assert 0 <= begin_pos < end_pos <= len(cur_sent)
+            try:
+                assert 0 <= begin_pos < end_pos <= len(cur_sent)
+            except AssertionError as err:
+                print(name, begin_pos, end_pos, cur_sent, start, end, doc['pmcid'])
+                raise err
             cur_entity.append({
                 'name': name,
                 'sent_id': sid,
@@ -422,6 +486,7 @@ def pubtator_to_docred(doc, labels):
 
     return {
         'pmid': int(doc['pmid']),
+        'pmcid': doc['pmcid'],
         'cids': cids,
         'vertexSet': vertex_set,
         'title': title,

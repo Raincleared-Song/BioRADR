@@ -49,7 +49,7 @@ if __name__ == '__main__':
         truth.add((pmid, h, t))
 
     test_docs = json.load(open(test_doc_path, 'r', encoding='utf-8'))
-    title2doc = {doc['title']: doc for doc in test_docs}
+    title2doc = {str(doc['pmid']): doc for doc in test_docs}
 
     answers = json.load(open(input_filename, 'r', encoding='utf-8'))
     correct_num, instance_num, predict_num, correct_in_train = 0, len(truth), 0, 0

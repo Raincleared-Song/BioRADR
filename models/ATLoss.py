@@ -4,6 +4,9 @@ import torch.nn.functional as F
 from config import ConfigDenoise as Config
 
 
+determine = torch.use_deterministic_algorithms if torch.__version__ == '1.10.0' else torch.set_deterministic
+
+
 class BinaryATLoss(nn.Module):
     def __init__(self, th_logit=0.0, minus_mask=-1e30):
         super().__init__()
@@ -26,7 +29,9 @@ class BinaryATLoss(nn.Module):
         scores = torch.stack((th_scores, scores), dim=2)
 
         p_mask = torch.zeros_like(scores).to(scores)
+        determine(False)
         p_mask[torch.arange(0, sample_number), labels, 1] = 1.0
+        determine(True)
         n_mask = 1 - p_mask
         n_mask[:, :, 0] = 0.0
 

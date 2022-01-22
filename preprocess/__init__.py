@@ -4,6 +4,7 @@ from .process_pretrain import process_pretrain
 
 task_to_process = {
     'denoise': process_denoise,
+    # 'denoise': process_finetune,
     'finetune': process_finetune,
     'pretrain': process_pretrain
 }

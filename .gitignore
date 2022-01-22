@@ -18,7 +18,7 @@ process_ctdred.py
 test.py
 fake*.py
 
-rank.sh
+rank*.sh
 test*.txt
 test*.log
 test*.json

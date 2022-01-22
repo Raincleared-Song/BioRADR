@@ -1,3 +1,4 @@
+import os
 import torch
 import torch.nn as nn
 import numpy as np
@@ -10,7 +11,8 @@ MODEL_CONFIG = {
     'hidden_size': 256,
     'bert_hidden': 768,
     'block_size': 64,
-    'bert_path': 'allenai/scibert_scivocab_cased'
+    'bert_path': '../huggingface/scibert_scivocab_cased' if os.path.exists(
+        '../huggingface/scibert_scivocab_cased') else 'allenai/scibert_scivocab_cased'
 }
 
 

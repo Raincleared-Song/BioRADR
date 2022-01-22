@@ -1,21 +1,27 @@
+import os
 import json
 from .config_base import ConfigBase
 
 
 class ConfigFineTune(ConfigBase):
+    data_path = {
+        'train': '../project-1/CDR/train_cdr.json',
+        'valid': '../project-1/CDR/dev_cdr.json',
+        'test': '../project-1/CDR/test_cdr.json'
+    }
     # data_path = {
     #     'train': 'CTDRED/train_mixed.json',
     #     'valid': 'CTDRED/dev.json',
     #     'test': 'CTDRED/test.json'
     # }
-    data_path = {
-        'train': '../project-1/CTDRED/train_mixed_binary_pos.json',
-        'valid': '../project-1/CTDRED/dev_binary_pos.json',
-        'test': '../project-1/CTDRED/test_binary_pos.json',
-        'negative_train': '../project-1/CTDRED/negative_train_mixed_binary_pos.json',
-        'negative_valid': '../project-1/CTDRED/negative_dev_binary_pos.json',
-        'negative_test': '../project-1/CTDRED/negative_test_binary_pos.json'
-    }
+    # data_path = {
+    #     'train': '../project-1/CDR/train_cdr_ctd_pos.json',
+    #     'valid': '../project-1/CDR/dev_cdr_ctd_pos.json',
+    #     'test': '../project-1/CDR/test_cdr_ctd_pos.json',
+    #     'negative_train': '../project-1/CTDRED/negative_train_mixed_binary_pos.json',
+    #     'negative_valid': '../project-1/CTDRED/negative_dev_binary_pos.json',
+    #     'negative_test': '../project-1/CTDRED/negative_test_binary_pos.json'
+    # }
     # data_path = {
     #     'train': 'CDR/train_cdr.json',
     #     'valid': 'CDR/dev_cdr.json',
@@ -33,7 +39,7 @@ class ConfigFineTune(ConfigBase):
     # }
     score_path = {
         'train': f'{ConfigBase.rank_result_path}/train_mixed_binary_pos_score.npy',
-        'valid': f'{ConfigBase.rank_result_path}/dev_binary_pos_score.npy',
+        'valid': f'{ConfigBase.rank_result_path}/dev_binary_pos_score_17.npy',
         'test': f'{ConfigBase.rank_result_path}/test_binary_pos_score.npy',
         'negative_train': f'{ConfigBase.rank_result_path}/negative_train_mixed_binary_pos_score.npy',
         'negative_valid': f'{ConfigBase.rank_result_path}/negative_dev_binary_pos_score.npy',
@@ -46,27 +52,27 @@ class ConfigFineTune(ConfigBase):
     # }
     title_path = {
         'train': f'{ConfigBase.rank_result_path}/train_mixed_binary_pos_pmid2range.json',
-        'valid': f'{ConfigBase.rank_result_path}/dev_binary_pos_pmid2range.json',
+        'valid': f'{ConfigBase.rank_result_path}/dev_binary_pos_pmid2range_17.json',
         'test': f'{ConfigBase.rank_result_path}/test_binary_pos_pmid2range.json',
         'negative_train': f'{ConfigBase.rank_result_path}/negative_train_mixed_binary_pos_pmid2range.json',
         'negative_valid': f'{ConfigBase.rank_result_path}/negative_dev_binary_pos_pmid2range.json',
         'negative_test': f'{ConfigBase.rank_result_path}/negative_test_binary_pos_pmid2range.json'
     }
 
-    reader_num = 30
-    # bert_path = 'dmis-lab/biobert-base-cased-v1.1'
-    bert_path = 'allenai/scibert_scivocab_cased'
-    # bert_path = 'allenai/scibert_scivocab_uncased'
-    token_padding = 512  # token reserved for each document
+    reader_num = 8
+    bert_path = '../huggingface/scibert_scivocab_cased' if os.path.exists(
+        '../huggingface/scibert_scivocab_cased') else 'allenai/scibert_scivocab_cased'
+    token_padding = 1024  # token reserved for each document
     entity_padding = None  # entity reserved for each document
     mention_padding = 3  # mention reserved for each entity
     # mention_padding = 1
     # train_sample_limit = 32  # max positive label number is 24
-    # train_sample_limit = 104  # cdr
-    train_sample_limit = 270  # CTD_binary
+    train_sample_limit = 104  # cdr
+    # train_sample_limit = 270  # CTD_binary
+    train_sample_number = 60  # cdr_cdr_neg_sample
     # test_sample_limit = 1600
-    # test_sample_limit = 117  # cdr
-    test_sample_limit = 294  # CTD_binary
+    test_sample_limit = 117  # cdr
+    # test_sample_limit = 294  # CTD_binary
     # train_sample_limit = 80
     # test_sample_limit = 2886  # #chemical * #gene
     # train_sample_limit = 40
@@ -86,13 +92,19 @@ class ConfigFineTune(ConfigBase):
     learning_rate = 2e-5
     weight_decay = 0
     adam_epsilon = 1e-6
-    epoch_num = 60
+    epoch_num = 40
     warmup_ratio = 0.06
 
     output_step = 1
+    save_global_step = -1
+    crop_documents = False
+    crop_mention_option = 0
+    entity_marker_type = 't'
+    assert crop_mention_option in [0, 1, 2]
+    assert entity_marker_type in ['mt', 'm', 't']
     test_step = 1
     model_path = 'checkpoint'
-    model_name = 'ctd_binary_denoise'
+    model_name = 'cdr_finetune_sci_type'
     fp16 = False
     lr_step_size = 1
     lr_gamma = 1
@@ -116,15 +128,11 @@ class ConfigFineTune(ConfigBase):
 
     use_group_bilinear = True
     use_logsumexp = False
-    use_long_input = True
-    use_type_marker = True
     output_score_type = 'softmax'
-    long_token_padding = 1024
     bilinear_block_size = 64
+    only_chem_disease = True
 
-    if use_long_input:
-        token_padding = long_token_padding
-    assert output_score_type in ['none', 'sigmoid', 'softmax']
+    assert output_score_type in ['pos', 'sigmoid', 'softmax', 'diff', 'sig_diff']
 
     use_extra = False
     if use_extra:

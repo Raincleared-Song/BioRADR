@@ -32,7 +32,7 @@ def test_cdr_model(model_name):
         while line[end] not in (',', '}'):
             end += 1
         valid_epochs.append(int(epoch))
-        valid_f1.append(float(line[pos: end]))
+        valid_f1.append(round(float(line[pos: end]) * 100, 2))
 
         model_whole = os.path.join(model_path, model)
         print(f'------ testing model {model_whole} ------')
@@ -72,4 +72,4 @@ def test_cdr_model(model_name):
 
 
 if __name__ == '__main__':
-    test_cdr_model('cdr_finetune_sci_filter_long_marker2')
+    test_cdr_model('cdr_finetune_sci_base')

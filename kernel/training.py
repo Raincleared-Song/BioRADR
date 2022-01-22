@@ -7,7 +7,7 @@ from apex import amp
 from .testing import test
 from config import ConfigBase
 from transformers import get_linear_schedule_with_warmup
-from utils import name_to_metric, print_value, time_to_str, save_model, time_tag
+from utils import name_to_metric, print_value, time_to_str, save_model
 
 
 def train(config: ConfigBase, models, datasets, it=None):
@@ -77,20 +77,16 @@ def train(config: ConfigBase, models, datasets, it=None):
         assert len(train_set) > 0
 
         for step, data in enumerate(train_set):
-            time_tag(0, True)
             for key, value in data.items():
                 if isinstance(value, torch.Tensor):
                     data[key] = Variable(value.to(config.gpu_device)) if use_gpu else Variable(value)
 
-            time_tag(1, True)
             result = model(data, 'train', eval_res)  # forward
-            time_tag(11, True)
 
             loss, eval_res = result['loss'], result['eval_res']
             loss = loss.mean()
             total_loss += float(loss)
             loss /= train_steps
-            time_tag(12, True)
 
             if config.fp16:
                 with amp.scale_loss(loss, optimizer) as scaled_loss:
@@ -99,7 +95,6 @@ def train(config: ConfigBase, models, datasets, it=None):
                 determine(False)
                 loss.backward()
                 determine(True)
-            time_tag(13, True)
 
             if step % train_steps == 0:
                 if config.fp16:
@@ -109,7 +104,6 @@ def train(config: ConfigBase, models, datasets, it=None):
                 optimizer.step()
                 optimizer.zero_grad()
                 scheduler.step()
-                time_tag(14, True)
 
             if step % output_step == 0:
                 metric_json = name_to_metric[config.output_metric](eval_res, 'train')
@@ -118,11 +112,10 @@ def train(config: ConfigBase, models, datasets, it=None):
                             f'{time_to_str(time_spent)}/{time_to_str(time_spent*(train_size-step-1)/(step+1))}',
                             f'{(total_loss / (step + 1)):.3f}', metric_json,
                             os.path.join(train_output_path, f'{epoch}.txt'), '\r')
-                time_tag(15, True)
             global_step += 1
-            # if step == 20:
-            #     print_time_stat()
-            #     unset_metric()
+            if config.save_global_step > 0 and global_step % config.save_global_step == 0 and step + 1 != train_size:
+                save_model(os.path.join(model_output_path, f'{epoch}-{global_step}.pkl'), model,
+                           optimizer, epoch, global_step, config)
 
         print_value(epoch, 'train', f'{step + 1}/{train_size}',
                     f'{time_to_str(time_spent)}/{time_to_str(time_spent*(train_size-step-1)/(step+1))}',
@@ -147,5 +140,3 @@ def train(config: ConfigBase, models, datasets, it=None):
                 with torch.no_grad():
                     # validation
                     test(model, datasets, 'valid', config, valid_output_path, epoch)
-    # unset_file()
-    # metric_out.close()

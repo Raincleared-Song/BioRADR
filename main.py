@@ -48,7 +48,7 @@ def inspect(task_: str, mode_='valid'):
 
 if __name__ == '__main__':
     # repeated experiments for cdr5
-    is_cdr = 'cdr' in Config.data_path['train'] and not Config.use_extra
+    is_cdr = False
     if is_cdr:
         task_path = Config.model_name
 

@@ -5,6 +5,7 @@ from .config_denoise import ConfigDenoise
 
 task_to_config = {
     'denoise': ConfigDenoise,
+    # 'denoise': ConfigFineTune,
     'finetune': ConfigFineTune,
     'pretrain': ConfigPretrain
 }

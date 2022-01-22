@@ -10,7 +10,7 @@ def perform_ner(sentence: str):
     spacy.prefer_gpu(0)
     nlp = spacy.load('en_core_sci_lg')
     paper = get_pmids(['28483577'])
-    paper = paper['28483577']['text']
+    paper = ' '.join(paper['28483577']['texts'])
     nlp.add_pipe('abbreviation_detector')
     nlp.add_pipe('scispacy_linker', config={'resolve_abbreviations': True, 'linker_name': 'mesh'})
     paper = nlp(paper)

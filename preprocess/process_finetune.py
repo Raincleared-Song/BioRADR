@@ -4,7 +4,7 @@ import os
 import torch
 from utils import load_json, sigmoid
 from config import ConfigFineTune as Config
-from .document_crop import document_crop, sentence_mention_crop
+from .document_crop import document_crop, mention_choose_by_pair
 
 
 use_cp: bool = False
@@ -82,7 +82,6 @@ def process_single(data, mode: str, extra=None):
     global mode_to_scores, mode_to_titles, use_score, use_cp
     if Config.crop_documents:
         document_crop(data)
-    sentence_mention_crop(data, mode, Config.crop_mention_option)
     pmid_key = 'pmid' if 'pmid' in data else 'pmsid'
     if extra is not None:
         use_score = extra
@@ -189,15 +188,8 @@ def process_single(data, mode: str, extra=None):
         cur_entity = []
         for mention in entity:
             if word_position[mention['sent_id']][mention['pos'][0]] < Config.token_padding:
-                cur_entity.append(word_position[mention['sent_id']][mention['pos'][0]])
-            if len(cur_entity) == Config.mention_padding:
-                break
+                cur_entity.append((mention['sent_id'], word_position[mention['sent_id']][mention['pos'][0]]))
         positions.append(cur_entity)
-    # padding length of mention number to 3
-    for i in range(len(positions)):
-        if len(positions[i]) == 0:
-            positions[i] = [0] * Config.mention_padding
-        positions[i] += [positions[i][0]] * (Config.mention_padding - len(positions[i]))
 
     label_mat = np.zeros((entity_num, entity_num, Config.relation_num))
     label_mat[:, :, Config.label2id['NA']] = 1
@@ -269,8 +261,10 @@ def process_single(data, mode: str, extra=None):
 
     for pair in samples:
         pair_ids.append(pair)
-        head_pos.append(positions[pair[0]])
-        tail_pos.append(positions[pair[1]])
+        head_p, tail_p = mention_choose_by_pair(data, pair[0], pair[1], positions,
+                                                Config.mention_padding, Config.crop_mention_option)
+        head_pos.append(head_p)
+        tail_pos.append(tail_p)
         labels.append(label_mat[pair[0], pair[1]])  # [[97], [97]]
         types.append((entities[pair[0]][0]['type'], entities[pair[1]][0]['type']))
 

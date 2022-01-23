@@ -1,7 +1,7 @@
 import random
 import torch
 from config import ConfigDenoise as Config
-from .document_crop import document_crop, sentence_mention_crop
+from .document_crop import document_crop, mention_choose_by_pair
 
 
 use_cp: bool = False
@@ -19,76 +19,60 @@ def process_denoise_test(data, mode: str):
 
     global use_cp
     use_cp = 'chemprot' in Config.data_path[mode].lower()
-    documents, attn_masks, word_positions, head_ids, tail_ids, pos_ids, titles = [], [], [], [], [], [], []
+    # head_poses: batch_size * sample_limit * mention_limit
+    documents, attn_masks, head_poses, tail_poses, pos_ids, titles = [], [], [], [], [], []
     pmid_key = 'pmid' if len(data) > 0 and 'pmid' in data[0] else 'pmsid'
     for doc in data:
         document, attn_mask, position = process_document(doc, mode)
         documents.append(document)
         attn_masks.append(attn_mask)
-        word_positions.append(position)
 
-        if mode == 'test':
-            entity_num = len(doc['vertexSet'])
-            if use_cp:
-                pairs = []
-                entities = doc['vertexSet']
-                for i in range(entity_num):
-                    for j in range(entity_num):
-                        if entities[i][0]['type'].lower().startswith('chemical') and \
-                                entities[j][0]['type'].lower().startswith('gene'):
-                            pairs.append((i, j))
-            else:
-                entities = doc['vertexSet']
-                pairs = [(i, j) for i in range(entity_num) for j in range(entity_num) if
-                         entities[i][0]['type'] == 'Chemical' and entities[j][0]['type'] == 'Disease']
-            head_ids.append([pair[0] for pair in pairs])
-            tail_ids.append([pair[1] for pair in pairs])
-            titles.append(doc[pmid_key])
+        entity_num = len(doc['vertexSet'])
+        if use_cp:
+            pairs = []
+            entities = doc['vertexSet']
+            for i in range(entity_num):
+                for j in range(entity_num):
+                    if entities[i][0]['type'].lower().startswith('chemical') and \
+                            entities[j][0]['type'].lower().startswith('gene'):
+                        pairs.append((i, j))
         else:
-            head_id, tail_id, pos_id = process_rank(doc)
-            head_ids.append(head_id)
-            tail_ids.append(tail_id)
-            pos_ids.append(pos_id)
+            entities = doc['vertexSet']
+            pairs = [(i, j) for i in range(entity_num) for j in range(entity_num) if
+                     entities[i][0]['type'] == 'Chemical' and entities[j][0]['type'] == 'Disease']
+        head_pos, tail_pos = [], []
+        for hid, tid in pairs:
+            head_p, tail_p = mention_choose_by_pair(doc, hid, tid, position,
+                                                    Config.mention_padding, Config.crop_mention_option)
+            head_pos.append(head_p)
+            tail_pos.append(tail_p)
+        head_poses.append(head_pos)
+        tail_poses.append(tail_pos)
+        titles.append(doc[pmid_key])
 
-    # dynamic pad positions
-    entity_padding = max(len(item) for item in word_positions)
-    for item in word_positions:
-        for _ in range(entity_padding - len(item)):
-            item.append([0] * Config.mention_padding)
     # dynamic pad head/tail ids
-    test_sample_limit = max(len(item) for item in head_ids)
+    test_sample_limit = max(len(item) for item in head_poses)
     sample_counts = []
-    for head_id, tail_id in zip(head_ids, tail_ids):
-        assert len(head_id) == len(tail_id)
-        sample_counts.append(len(head_id))
-        head_id += [0] * (test_sample_limit - len(head_id))
-        tail_id += [0] * (test_sample_limit - len(tail_id))
+    for head_pos, tail_pos in zip(head_poses, tail_poses):
+        assert len(head_pos) == len(tail_pos)
+        sample_counts.append(len(head_pos))
+        for _ in range(test_sample_limit - len(head_pos)):
+            head_pos.append([0] * Config.mention_padding)
+            tail_pos.append([0] * Config.mention_padding)
 
-    if mode == 'test':
-        return {
-            'documents': torch.LongTensor(documents),
-            'attn_mask': torch.FloatTensor(attn_masks),
-            'word_pos': torch.LongTensor(word_positions),
-            'head_ids': torch.LongTensor(head_ids),
-            'tail_ids': torch.LongTensor(tail_ids),
-            'titles': titles,
-            'sample_counts': sample_counts
-        }
-    else:
-        return {
-            'documents': torch.LongTensor(documents),
-            'attn_mask': torch.FloatTensor(attn_masks),
-            'word_pos': torch.LongTensor(word_positions),
-            'head_ids': torch.LongTensor(head_ids),
-            'tail_ids': torch.LongTensor(tail_ids),
-            'labels': torch.LongTensor(pos_ids)
-        }
+    return {
+        'documents': torch.LongTensor(documents),
+        'attn_mask': torch.FloatTensor(attn_masks),
+        'head_poses': torch.LongTensor(head_poses),
+        'tail_poses': torch.LongTensor(tail_poses),
+        'titles': titles,
+        'sample_counts': sample_counts
+    }
 
 
 def process_document(data, mode: str):
     if Config.crop_documents:
         document_crop(data)
-    sentence_mention_crop(data, mode, Config.crop_mention_option)
     sentences = [[Config.tokenizer.tokenize(word) for word in sent] for sent in data['sents']]
 
     entities = data['vertexSet']
@@ -133,142 +117,100 @@ def process_document(data, mode: str):
         cur_entity = []
         for mention in entity:
             if word_position[mention['sent_id']][mention['pos'][0]] < Config.token_padding:
-                cur_entity.append(word_position[mention['sent_id']][mention['pos'][0]])
-            if len(cur_entity) == Config.mention_padding:
-                break
+                cur_entity.append((mention['sent_id'], word_position[mention['sent_id']][mention['pos'][0]]))
         positions.append(cur_entity)
-    # padding length of mention number to 3
-    for i in range(len(positions)):
-        if len(positions[i]) == 0:
-            positions[i] = [0] * Config.mention_padding
-        positions[i] += [positions[i][0]] * (Config.mention_padding - len(positions[i]))
 
     return Config.tokenizer.convert_tokens_to_ids(document), attn_mask, positions
 
 
-def process_rank(data):
-    entity_num = len(data['vertexSet'])
-    positive_pairs = set([(lab['h'], lab['t']) for lab in data['labels'] if lab['r'] != 'NA'])
-    global use_cp
-    if use_cp:
-        negative_pairs = []
-        entities = data['vertexSet']
-        for i in range(entity_num):
-            for j in range(entity_num):
-                if entities[i][0]['type'].lower().startswith('chemical') and \
-                        entities[j][0]['type'].lower().startswith('gene') and (i, j) not in positive_pairs:
-                    negative_pairs.append((i, j))
-    else:
-        entities = data['vertexSet']
-        negative_pairs = [(i, j) for i in range(entity_num) for j in range(entity_num) if
-                          entities[i][0]['type'] == 'Chemical' and entities[j][0]['type'] == 'Disease'
-                          and (i, j) not in positive_pairs]
-        assert len(data['labels']) == len(positive_pairs)
-    try:
-        assert len(negative_pairs) > 0
-    except AssertionError as err:
-        print(positive_pairs)
-        entities = data['vertexSet']
-        print([item[0]['type'] for item in entities])
-        raise err
-    while len(negative_pairs) < Config.negative_num:
-        negative_pairs *= 2
-    positive_pairs = list(positive_pairs)
-
-    head_ids, tail_ids, pos_ids = [], [], []
-    positive_samples = []
-    while len(positive_samples) + len(positive_pairs) <= Config.positive_num:
-        positive_samples += positive_pairs
-        random.shuffle(positive_pairs)
-    positive_samples += random.sample(positive_pairs, Config.positive_num - len(positive_samples))
-
-    for i in range(Config.positive_num):
-        head_ids.append([])
-        tail_ids.append([])
-
-        positive_sample = positive_samples[i]
-        negative_samples = random.sample(negative_pairs, Config.negative_num)
-        pos_p = random.randint(0, Config.negative_num)
-        pos_ids.append(pos_p)
-        for pair in (negative_samples[:pos_p] + [positive_sample] + negative_samples[pos_p:]):
-            head_ids[-1].append(pair[0])
-            tail_ids[-1].append(pair[1])
-
-    return head_ids, tail_ids, pos_ids
+def get_position_matrix(heads, tails, doc, word_pos):
+    assert len(heads) == len(tails)
+    # instance_num * candidate_num * mention_limit
+    head_pos, tail_pos = [], []
+    for cans_h, cans_t in zip(heads, tails):
+        cur_pos_h, cur_pos_t = [], []
+        assert len(cans_h) == len(cans_t)
+        for hid, tid in zip(cans_h, cans_t):
+            head_p, tail_p = mention_choose_by_pair(doc, hid, tid, word_pos,
+                                                    Config.mention_padding, Config.crop_mention_option)
+            cur_pos_h.append(head_p)
+            cur_pos_t.append(tail_p)
+        head_pos.append(cur_pos_h)
+        tail_pos.append(cur_pos_t)
+    return head_pos, tail_pos
 
 
 def process_denoise_train(data, mode: str):
     assert mode != 'test'
 
     documents1, documents2 = [], []
-    positions1, positions2 = [], []
     attn_mask1, attn_mask2 = [], []
 
     # relation detection
     # intra-document
-    rd_head_ids1, rd_head_ids2 = [], []
-    rd_tail_ids1, rd_tail_ids2 = [], []
+    rd_head_poses1, rd_head_poses2 = [], []
+    rd_tail_poses1, rd_tail_poses2 = [], []
     rd_label1, rd_label2 = [], []
 
     # inter-document
-    rd_head_ids1_x, rd_head_ids2_x = [], []
-    rd_tail_ids1_x, rd_tail_ids2_x = [], []
+    rd_head_poses1_x, rd_tail_poses1_x = [], []
+    rd_head_poses2_x, rd_tail_poses2_x = [], []
     rd_label_x = []
 
     for item in data:
         doc1, doc2 = item['doc1'], item['doc2']
 
-        document, mask, pos = process_document(doc1, mode)
+        document, mask, pos1 = process_document(doc1, mode)
         documents1.append(document)
         attn_mask1.append(mask)
-        positions1.append(pos)
 
-        document, mask, pos = process_document(doc2, mode)
+        document, mask, pos2 = process_document(doc2, mode)
         documents2.append(document)
         attn_mask2.append(mask)
-        positions2.append(pos)
 
         # intra RD
         head, tail, label = process_intra_rank(doc1)
-        rd_head_ids1.append(head)
-        rd_tail_ids1.append(tail)
+        head_positions, tail_positions = get_position_matrix(head, tail, doc1, pos1)
+        rd_head_poses1.append(head_positions)
+        rd_tail_poses1.append(tail_positions)
         rd_label1.append(label)
 
         head, tail, label = process_intra_rank(doc2)
-        rd_head_ids2.append(head)
-        rd_tail_ids2.append(tail)
+        head_positions, tail_positions = get_position_matrix(head, tail, doc2, pos2)
+        rd_head_poses2.append(head_positions)
+        rd_tail_poses2.append(tail_positions)
         rd_label2.append(label)
 
         # inter RD
         if Config.use_inter:
             head1, tail1, head2, tail2, label = process_inter_rank(doc1, doc2)
-            rd_head_ids1_x.append(head1)
-            rd_head_ids2_x.append(head2)
-            rd_tail_ids1_x.append(tail1)
-            rd_tail_ids2_x.append(tail2)
+            head_positions, tail_positions = get_position_matrix(head1, tail1, doc1, pos1)
+            rd_head_poses1_x.append(head_positions)
+            rd_tail_poses1_x.append(tail_positions)
+            head_positions, tail_positions = get_position_matrix(head2, tail2, doc2, pos2)
+            rd_head_poses2_x.append(head_positions)
+            rd_tail_poses2_x.append(tail_positions)
             rd_label_x.append(label)
 
-        return {
-            'document1': torch.LongTensor(documents1),
-            'document2': torch.LongTensor(documents2),
-            'positions1': torch.LongTensor(positions1),
-            'positions2': torch.LongTensor(positions2),
-            'attn_mask1': torch.FloatTensor(attn_mask1),
-            'attn_mask2': torch.FloatTensor(attn_mask2),
+    return {
+        'document1': torch.LongTensor(documents1),
+        'document2': torch.LongTensor(documents2),
+        'attn_mask1': torch.FloatTensor(attn_mask1),
+        'attn_mask2': torch.FloatTensor(attn_mask2),
 
-            'rd_head_ids1': torch.LongTensor(rd_head_ids1),
-            'rd_head_ids2': torch.LongTensor(rd_head_ids2),
-            'rd_tail_ids1': torch.LongTensor(rd_tail_ids1),
-            'rd_tail_ids2': torch.LongTensor(rd_tail_ids2),
-            'rd_label1': torch.LongTensor(rd_label1),
-            'rd_label2': torch.LongTensor(rd_label2),
+        'rd_head_poses1': torch.LongTensor(rd_head_poses1),
+        'rd_tail_poses1': torch.LongTensor(rd_tail_poses1),
+        'rd_head_poses2': torch.LongTensor(rd_head_poses2),
+        'rd_tail_poses2': torch.LongTensor(rd_tail_poses2),
+        'rd_label1': torch.LongTensor(rd_label1),
+        'rd_label2': torch.LongTensor(rd_label2),
 
-            'rd_head_ids1_x': torch.LongTensor(rd_head_ids1_x),
-            'rd_head_ids2_x': torch.LongTensor(rd_head_ids2_x),
-            'rd_tail_ids1_x': torch.LongTensor(rd_tail_ids1_x),
-            'rd_tail_ids2_x': torch.LongTensor(rd_tail_ids2_x),
-            'rd_label_x': torch.LongTensor(rd_label_x),
-        }
+        'rd_head_poses1_x': torch.LongTensor(rd_head_poses1_x),
+        'rd_tail_poses1_x': torch.LongTensor(rd_tail_poses1_x),
+        'rd_head_poses2_x': torch.LongTensor(rd_head_poses2_x),
+        'rd_tail_poses2_x': torch.LongTensor(rd_tail_poses2_x),
+        'rd_label_x': torch.LongTensor(rd_label_x),
+    }
 
 
 def get_pos_neg_pairs(data, ret_dict=False):

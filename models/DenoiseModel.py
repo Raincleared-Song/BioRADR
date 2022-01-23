@@ -39,68 +39,34 @@ class DenoiseModel(nn.Module):
         else:
             return self.forward_test(data, mode, eval_res)
 
-    def forward_test(self, data, mode: str, eval_res: dict = None):
+    def forward_test(self, data, mode: str, _):
         assert mode == 'test'
 
         documents = data['documents']
         attn_mask = data['attn_mask']
-        word_pos = data['word_pos']
-        head_ids = data['head_ids']
-        tail_ids = data['tail_ids']
+        # batch_size * sample_limit * mention_limit
+        head_poses = data['head_poses']
+        tail_poses = data['tail_poses']
 
-        batch_size = documents.shape[0]
-        entity_lim = word_pos.shape[1]
-        mention_lim = word_pos.shape[2]
+        batch_size, pair_num, mention_lim = head_poses.shape
 
+        # batch_size * sent_pad * 768
         embed_docu = process_long_input(self.bert, documents, attn_mask, Config)
-        indices = torch.arange(0, batch_size).view(batch_size, 1, 1).repeat(1, entity_lim, mention_lim)
-        entity_rep = embed_docu[indices, word_pos]
-        entity_rep = torch.max(entity_rep, dim=2)[0]
+        indices = torch.arange(0, batch_size).view(batch_size, 1, 1).repeat(1, pair_num, mention_lim)
+        head_men_rep = embed_docu[indices, head_poses]
+        tail_men_rep = embed_docu[indices, tail_poses]
+        head_rep = torch.max(head_men_rep, dim=2)[0]
+        tail_rep = torch.max(tail_men_rep, dim=2)[0]
 
-        if mode == 'test':
-            pair_num = head_ids.shape[1]
-            indices = torch.arange(0, batch_size).view(batch_size, 1).repeat(1, pair_num)
-
-            head_rep = entity_rep[indices, head_ids]
-            tail_rep = entity_rep[indices, tail_ids]
-
-            head_rep = head_rep.view(batch_size, pair_num,
-                                     self.bert_hidden // self.block_size, self.block_size)
-            tail_rep = tail_rep.view(batch_size, pair_num,
-                                     self.bert_hidden // self.block_size, self.block_size)
-            rel_rep = (head_rep.unsqueeze(4) * tail_rep.unsqueeze(3)).view(batch_size, pair_num,
-                                                                           self.bert_hidden * self.block_size)
-            rel_rep = self.bilinear(rel_rep)
-
-            score = self.linear_out(rel_rep).squeeze(2)
-
-            return {'score': score, 'loss': 0, 'titles': data['titles']}
-
-        else:
-            if eval_res is None:
-                eval_res = {'RD': {'correct_num': 0, 'instance_num': 0}}
-
-            instance_num, candidate_num = head_ids.shape[1], head_ids.shape[2]
-            indices = torch.arange(0, batch_size).view(batch_size, 1, 1).repeat(1, instance_num, candidate_num)
-
-            head_rep = entity_rep[indices, head_ids].view(batch_size, instance_num, candidate_num, self.bert_hidden)
-            tail_rep = entity_rep[indices, tail_ids].view(batch_size, instance_num, candidate_num, self.bert_hidden)
-
-            head_rep = head_rep.view(batch_size, instance_num, candidate_num,
-                                     self.bert_hidden // self.block_size, self.block_size)
-            tail_rep = tail_rep.view(batch_size, instance_num, candidate_num,
-                                     self.bert_hidden // self.block_size, self.block_size)
-            rel_rep = (head_rep.unsqueeze(5) * tail_rep.unsqueeze(4)).view(batch_size, instance_num, candidate_num,
-                                                                           self.bert_hidden * self.block_size)
-            rel_rep = self.bilinear(rel_rep)
-
-            score = self.linear_out(rel_rep).squeeze(3).view(-1, candidate_num)
-
-            labels = data['labels'].view(-1)
-            loss = self.loss(score, labels)
-            eval_res['RD'] = eval_softmax(score, labels, eval_res['RD'])
-
-            return {'loss': loss, 'eval_res': eval_res}
+        head_rep = head_rep.view(batch_size, pair_num,
+                                 self.bert_hidden // self.block_size, self.block_size)
+        tail_rep = tail_rep.view(batch_size, pair_num,
+                                 self.bert_hidden // self.block_size, self.block_size)
+        rel_rep = (head_rep.unsqueeze(4) * tail_rep.unsqueeze(3)).view(batch_size, pair_num,
+                                                                       self.bert_hidden * self.block_size)
+        rel_rep = self.bilinear(rel_rep)
+        score = self.linear_out(rel_rep).squeeze(2)
+        return {'score': score, 'loss': 0, 'titles': data['titles']}
 
     def forward_train(self, data, mode: str, eval_res: dict = None):
         assert mode != 'test'
@@ -108,54 +74,44 @@ class DenoiseModel(nn.Module):
             eval_res = {'RD': {'correct_num': 0, 'instance_num': 0}, 'RD_X': {'correct_num': 0, 'instance_num': 0}}
 
         document1, document2 = data['document1'], data['document2']
-        positions1, positions2 = data['positions1'], data['positions2']
         attn_mask1, attn_mask2 = data['attn_mask1'], data['attn_mask2']
 
         # relation detection
         # intra-document
-        rd_head_ids1, rd_head_ids2 = data['rd_head_ids1'], data['rd_head_ids2']
-        rd_tail_ids1, rd_tail_ids2 = data['rd_tail_ids1'], data['rd_tail_ids2']
+        rd_head_poses1, rd_tail_poses1 = data['rd_head_poses1'], data['rd_tail_poses1']
+        rd_head_poses2, rd_tail_poses2 = data['rd_head_poses2'], data['rd_tail_poses2']
         rd_label1, rd_label2 = data['rd_label1'], data['rd_label2']
 
         # inter-document
-        rd_head_ids1_x, rd_head_ids2_x = data['rd_head_ids1_x'], data['rd_head_ids2_x']
-        rd_tail_ids1_x, rd_tail_ids2_x = data['rd_tail_ids1_x'], data['rd_tail_ids2_x']
+        rd_head_poses1_x, rd_tail_poses1_x = data['rd_head_poses1_x'], data['rd_tail_poses1_x']
+        rd_head_poses2_x, rd_tail_poses2_x = data['rd_head_poses2_x'], data['rd_tail_poses2_x']
         rd_label_x = data['rd_label_x']
-
-        # constants
-        batch_size = document1.shape[0]
-        entity_lim1, entity_lim2, mention_lim = positions1.shape[1], positions2.shape[1], positions1.shape[2]
 
         doc_hidden1 = process_long_input(self.bert, document1, attn_mask1, Config)
         doc_hidden2 = process_long_input(self.bert, document2, attn_mask2, Config)
 
-        indices1 = torch.arange(0, batch_size).view(batch_size, 1, 1).repeat(1, entity_lim1, mention_lim)
-        rep_ent1 = doc_hidden1[indices1, positions1].view(batch_size, entity_lim1, mention_lim, self.bert_hidden)
-        indices2 = torch.arange(0, batch_size).view(batch_size, 1, 1).repeat(1, entity_lim2, mention_lim)
-        rep_ent2 = doc_hidden2[indices2, positions2].view(batch_size, entity_lim2, mention_lim, self.bert_hidden)
-
-        rep_ent1 = torch.max(rep_ent1, dim=2)[0]
-        rep_ent2 = torch.max(rep_ent2, dim=2)[0]
-
         total_loss = 0
 
-        loss1, eval_res = self.forward_rd(rep_ent1, rd_head_ids1, rd_tail_ids1, rd_label1, eval_res)
-        loss2, eval_res = self.forward_rd(rep_ent2, rd_head_ids2, rd_tail_ids2, rd_label2, eval_res)
+        loss1, eval_res = self.forward_rd(doc_hidden1, rd_head_poses1, rd_tail_poses1, rd_label1, eval_res)
+        loss2, eval_res = self.forward_rd(doc_hidden2, rd_head_poses2, rd_tail_poses2, rd_label2, eval_res)
         total_loss += loss1 + loss2
 
         if Config.use_inter:
-            loss, eval_res = self.forward_rd_x(rep_ent1, rep_ent2, rd_head_ids1_x, rd_head_ids2_x,
-                                               rd_tail_ids1_x, rd_tail_ids2_x, rd_label_x, eval_res)
+            loss, eval_res = self.forward_rd_x(doc_hidden1, doc_hidden2, rd_head_poses1_x, rd_tail_poses1_x,
+                                               rd_head_poses2_x, rd_tail_poses2_x, rd_label_x, eval_res)
             total_loss += loss
 
         return {'loss': total_loss, 'eval_res': eval_res}
 
-    def forward_rd(self, ent_rep, head_ids, tail_ids, label, eval_res):
-        batch_size, sample_size, negative_size = head_ids.shape  # (1, 16, 16)
+    def forward_rd(self, embed_doc, head_poses, tail_poses, label, eval_res):
+        batch_size, sample_size, negative_size, mention_limit = head_poses.shape
 
-        indices = torch.arange(0, batch_size).view(batch_size, 1, 1).repeat(1, sample_size, negative_size)
-        head_rep = ent_rep[indices, head_ids].view(batch_size, sample_size, negative_size, self.bert_hidden)
-        tail_rep = ent_rep[indices, tail_ids].view(batch_size, sample_size, negative_size, self.bert_hidden)
+        indices = torch.arange(0, batch_size).view(
+            batch_size, 1, 1, 1).repeat(1, sample_size, negative_size, mention_limit)
+        head_rep = torch.max(embed_doc[indices, head_poses].view(
+            batch_size, sample_size, negative_size, mention_limit, self.bert_hidden), dim=3)[0]
+        tail_rep = torch.max(embed_doc[indices, tail_poses].view(
+            batch_size, sample_size, negative_size, mention_limit, self.bert_hidden), dim=3)[0]
 
         head_rep = head_rep.view(batch_size, sample_size, negative_size,
                                  self.bert_hidden // self.block_size, self.block_size)
@@ -172,14 +128,19 @@ class DenoiseModel(nn.Module):
 
         return loss, eval_res
 
-    def forward_rd_x(self, ent_rep1, ent_rep2, head1, head2, tail1, tail2, label, eval_res):
-        batch_size, sample_size, negative_size = head1.shape  # (1, 16, 8)
+    def forward_rd_x(self, embed_doc1, embed_doc2, head1, tail1, head2, tail2, label, eval_res):
+        batch_size, sample_size, negative_size, mention_limit = head1.shape
 
-        indices = torch.arange(0, batch_size).view(batch_size, 1, 1).repeat(1, sample_size, negative_size)
-        head_rep1 = ent_rep1[indices, head1].view(batch_size, sample_size, negative_size, self.bert_hidden)
-        tail_rep1 = ent_rep1[indices, tail1].view(batch_size, sample_size, negative_size, self.bert_hidden)
-        head_rep2 = ent_rep2[indices, head2].view(batch_size, sample_size, negative_size, self.bert_hidden)
-        tail_rep2 = ent_rep2[indices, tail2].view(batch_size, sample_size, negative_size, self.bert_hidden)
+        indices = torch.arange(0, batch_size).view(
+            batch_size, 1, 1, 1).repeat(1, sample_size, negative_size, mention_limit)
+        head_rep1 = torch.max(embed_doc1[indices, head1].view(
+            batch_size, sample_size, negative_size, mention_limit, self.bert_hidden), dim=3)[0]
+        tail_rep1 = torch.max(embed_doc1[indices, tail1].view(
+            batch_size, sample_size, negative_size, mention_limit, self.bert_hidden), dim=3)[0]
+        head_rep2 = torch.max(embed_doc2[indices, head2].view(
+            batch_size, sample_size, negative_size, mention_limit, self.bert_hidden), dim=3)[0]
+        tail_rep2 = torch.max(embed_doc2[indices, tail2].view(
+            batch_size, sample_size, negative_size, mention_limit, self.bert_hidden), dim=3)[0]
 
         head_rep1 = head_rep1.view(batch_size, sample_size, negative_size,
                                    self.bert_hidden // self.block_size, self.block_size)

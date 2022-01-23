@@ -29,12 +29,12 @@ class ConfigBase:
     # relation_num = 24  # Chemprot
     bert_hidden = 768
     # valid_instance_cnt = 14568  # CTDRED
-    valid_instance_cnt = 997  # cdr
+    # valid_instance_cnt = 997  # cdr
     # valid_instance_cnt = 8598  # CTD_binary
     # valid_instance_cnt = 7992  # CTD_binary2
     # valid_instance_cnt = 8872  # cdr_ctd
     # valid_instance_cnt = 13078   # ctd_cd_cg
-    # valid_instance_cnt = 20683  # ctd_all
+    valid_instance_cnt = 20683  # ctd_all
     # valid_instance_cnt = 3466  # Chemprot_fr
     optimizer_dict = {
         'adam': Adam,

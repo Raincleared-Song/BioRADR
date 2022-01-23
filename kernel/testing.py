@@ -26,13 +26,8 @@ def test(model, datasets, mode: str, config: ConfigBase, path: str = None, epoch
     na_label = config.label2id['NA']
 
     pbar = tqdm(range(len(dataset))) if mode == 'test' else None
-    # clear_count()
 
     for step, data in enumerate(dataset):
-        # set_metric()
-        # if step == 20:
-        #     print_time_stat()
-        #     unset_metric()
         for key, value in data.items():
             if isinstance(value, torch.Tensor):
                 data[key] = Variable(value.to(config.gpu_device)) if use_gpu else Variable(value)

@@ -37,9 +37,9 @@ class DenoiseModel(nn.Module):
         if mode != 'test':
             return self.forward_train(data, mode, eval_res)
         else:
-            return self.forward_test(data, mode, eval_res)
+            return self.forward_test(data, mode)
 
-    def forward_test(self, data, mode: str, eval_res: dict = None):
+    def forward_test(self, data, mode: str):
         assert mode == 'test'
 
         documents = data['documents']
@@ -57,50 +57,21 @@ class DenoiseModel(nn.Module):
         entity_rep = embed_docu[indices, word_pos]
         entity_rep = torch.max(entity_rep, dim=2)[0]
 
-        if mode == 'test':
-            pair_num = head_ids.shape[1]
-            indices = torch.arange(0, batch_size).view(batch_size, 1).repeat(1, pair_num)
+        pair_num = head_ids.shape[1]
+        indices = torch.arange(0, batch_size).view(batch_size, 1).repeat(1, pair_num)
 
-            head_rep = entity_rep[indices, head_ids]
-            tail_rep = entity_rep[indices, tail_ids]
+        head_rep = entity_rep[indices, head_ids]
+        tail_rep = entity_rep[indices, tail_ids]
 
-            head_rep = head_rep.view(batch_size, pair_num,
-                                     self.bert_hidden // self.block_size, self.block_size)
-            tail_rep = tail_rep.view(batch_size, pair_num,
-                                     self.bert_hidden // self.block_size, self.block_size)
-            rel_rep = (head_rep.unsqueeze(4) * tail_rep.unsqueeze(3)).view(batch_size, pair_num,
-                                                                           self.bert_hidden * self.block_size)
-            rel_rep = self.bilinear(rel_rep)
-
-            score = self.linear_out(rel_rep).squeeze(2)
-
-            return {'score': score, 'loss': 0, 'titles': data['titles']}
-
-        else:
-            if eval_res is None:
-                eval_res = {'RD': {'correct_num': 0, 'instance_num': 0}}
-
-            instance_num, candidate_num = head_ids.shape[1], head_ids.shape[2]
-            indices = torch.arange(0, batch_size).view(batch_size, 1, 1).repeat(1, instance_num, candidate_num)
-
-            head_rep = entity_rep[indices, head_ids].view(batch_size, instance_num, candidate_num, self.bert_hidden)
-            tail_rep = entity_rep[indices, tail_ids].view(batch_size, instance_num, candidate_num, self.bert_hidden)
-
-            head_rep = head_rep.view(batch_size, instance_num, candidate_num,
-                                     self.bert_hidden // self.block_size, self.block_size)
-            tail_rep = tail_rep.view(batch_size, instance_num, candidate_num,
-                                     self.bert_hidden // self.block_size, self.block_size)
-            rel_rep = (head_rep.unsqueeze(5) * tail_rep.unsqueeze(4)).view(batch_size, instance_num, candidate_num,
-                                                                           self.bert_hidden * self.block_size)
-            rel_rep = self.bilinear(rel_rep)
-
-            score = self.linear_out(rel_rep).squeeze(3).view(-1, candidate_num)
-
-            labels = data['labels'].view(-1)
-            loss = self.loss(score, labels)
-            eval_res['RD'] = eval_softmax(score, labels, eval_res['RD'])
-
-            return {'loss': loss, 'eval_res': eval_res}
+        head_rep = head_rep.view(batch_size, pair_num,
+                                 self.bert_hidden // self.block_size, self.block_size)
+        tail_rep = tail_rep.view(batch_size, pair_num,
+                                 self.bert_hidden // self.block_size, self.block_size)
+        rel_rep = (head_rep.unsqueeze(4) * tail_rep.unsqueeze(3)).view(batch_size, pair_num,
+                                                                       self.bert_hidden * self.block_size)
+        rel_rep = self.bilinear(rel_rep)
+        score = self.linear_out(rel_rep).squeeze(2)
+        return {'score': score, 'loss': 0, 'titles': data['titles']}
 
     def forward_train(self, data, mode: str, eval_res: dict = None):
         assert mode != 'test'

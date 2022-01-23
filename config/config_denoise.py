@@ -29,7 +29,7 @@ class ConfigDenoise(ConfigBase):
         'test': 16
     }
 
-    reader_num = 8
+    reader_num = 4
     bert_path = '../huggingface/scibert_scivocab_cased' if os.path.exists(
         '../huggingface/scibert_scivocab_cased') else 'allenai/scibert_scivocab_cased'
     score_path = None
@@ -56,7 +56,7 @@ class ConfigDenoise(ConfigBase):
     test_sample_limit = 324
     # train_sample_limit = 40
     # test_sample_limit = 162  # #chemical * #gene
-    do_validation = True
+    do_validation = False
     use_gpu = True
     gpu_device = 'cuda:0'
     hidden_size = 256
@@ -72,13 +72,13 @@ class ConfigDenoise(ConfigBase):
     output_step = 1
     save_global_step = 800
     crop_documents = False
-    crop_mention_option = 1
-    entity_marker_type = 't'
+    crop_mention_option = 0
+    entity_marker_type = 'mt'
     assert crop_mention_option in [0, 1, 2]
     assert entity_marker_type in ['mt', 'm', 't']
     test_step = 1
     model_path = 'checkpoint'
-    model_name = 'ctd_all_celoss_p16_n15_denoise_tpmk1_rep'
+    model_name = 'ctd_all_celoss_p16_n15_denoise_ag'
     fp16 = False
     lr_step_size = 1  # step_size
     lr_gamma = 1

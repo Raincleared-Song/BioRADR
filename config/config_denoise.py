@@ -24,7 +24,7 @@ class ConfigDenoise(ConfigBase):
     #     'test': None  # determined by terminal args
     # }
     batch_size = {
-        'train': 4,
+        'train': 2,
         'valid': 16,
         'test': 16
     }

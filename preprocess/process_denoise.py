@@ -181,6 +181,17 @@ def process_denoise_train(data, mode: str):
             rd_tail_ids2_x.append(tail2)
             rd_label_x.append(label)
 
+    # dynamically padding positions
+    entity_pad1, entity_pad2 = max(len(p) for p in positions1), max(len(p) for p in positions2)
+    for idx, cur_p in enumerate(positions1):
+        pad_len = entity_pad1 - len(cur_p)
+        for _ in range(pad_len):
+            cur_p.append([0] * Config.mention_padding)
+    for idx, cur_p in enumerate(positions2):
+        pad_len = entity_pad2 - len(cur_p)
+        for _ in range(pad_len):
+            cur_p.append([0] * Config.mention_padding)
+
     return {
         'document1': torch.LongTensor(documents1),
         'document2': torch.LongTensor(documents2),

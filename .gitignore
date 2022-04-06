@@ -27,3 +27,4 @@ test*.json
 problem*.txt
 problem*.log
 test_cps_score.py
+*.zip

@@ -8,4 +8,4 @@ if __name__ == "__main__":
     print('Initialized!')
     initialize()
 
-    app.run(host="127.0.0.1", port=17201, debug=True, threaded=True, use_reloader=False)
+    app.run(host="0.0.0.0", port=17201, debug=True, threaded=True, use_reloader=False)

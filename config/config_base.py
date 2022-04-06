@@ -95,7 +95,9 @@ class ConfigBase:
     weight_decay: int
     adam_epsilon: float
     warmup_ratio: float
+    from_epoch: int = -1
     epoch_num: int
+    real_epoch_num: int
 
     output_step: int
     save_global_step: int

@@ -36,10 +36,10 @@ def process_finetune(data, mode: str):
     global use_cp
     pmid_key = 'pmid' if len(data) > 0 and 'pmid' in data[0] else 'pmsid'
     use_cp = 'chemprot' in Config.data_path[mode].lower()
-    documents, labels, head_poses, tail_poses, label_masks, attn_masks, pairs_list, titles, types = \
-        [], [], [], [], [], [], [], [doc[pmid_key] for doc in data], []
+    documents, labels, head_poses, tail_poses, label_masks, attn_masks, pairs_list, titles, types, real_list = \
+        [], [], [], [], [], [], [], [str(doc[pmid_key]) for doc in data], [], []
     for doc in data:
-        document, label, head_pos, tail_pos, label_mask, attn_mask, pair_ids, typ = process_single(doc, mode)
+        document, label, head_pos, tail_pos, label_mask, attn_mask, pair_ids, typ, real = process_single(doc, mode)
         documents.append(document)
         labels.append(label)
         head_poses.append(head_pos)
@@ -48,6 +48,7 @@ def process_finetune(data, mode: str):
         attn_masks.append(attn_mask)
         pairs_list.append(pair_ids)
         types.append(typ)
+        real_list.append(real)
 
     sample_counts = []
     for idx in range(len(data)):
@@ -74,7 +75,8 @@ def process_finetune(data, mode: str):
         'pair_ids': pairs_list,
         'titles': titles,
         'sample_counts': sample_counts,
-        'types': types
+        'types': types,
+        'real_idx': real_list,
     }
 
 
@@ -94,7 +96,7 @@ def process_single(data, mode: str, extra=None):
     if use_score:
         titles = mode_to_titles[mode]
         # noinspection PyUnresolvedReferences
-        t_idx = titles[data[pmid_key]]
+        t_idx = titles[str(data[pmid_key])]
         if isinstance(t_idx, int):
             # title -> score matrix row id
             scores = mode_to_scores[mode][t_idx]
@@ -150,7 +152,7 @@ def process_single(data, mode: str, extra=None):
     else:
         for i, mentions in enumerate(entities):
             for mention in mentions:
-                if Config.entity_marker_type != 't':
+                if Config.entity_marker_type not in ['t', 't-m']:
                     tmp: list = sentences[mention['sent_id']][mention['pos'][0]]
                     if Config.entity_marker_type == 'mt':
                         # both mention and type
@@ -160,12 +162,24 @@ def process_single(data, mode: str, extra=None):
                         # Config.entity_marker_type == 'm', only mention
                         sentences[mention['sent_id']][mention['pos'][0]] = [f'[unused{(i << 1) + 1}]'] + tmp
                 else:
-                    # Config.entity_marker_type == 't', blank all mention, only type
+                    # Config.entity_marker_type in ['t', 't-m'], blank all mention, only type
+                    # t-m: type, *, [MASK]
                     for pos in range(mention['pos'][0], mention['pos'][1]):
                         sentences[mention['sent_id']][pos] = []
-                    sentences[mention['sent_id']][mention['pos'][0]] = \
-                        [f'[unused{(i << 1) + 1}]', mention['type'], '*', '[unused0]']
-                sentences[mention['sent_id']][mention['pos'][1] - 1].append(f'[unused{(i + 1) << 1}]')
+                    if Config.entity_marker_type == 't':
+                        sentences[mention['sent_id']][mention['pos'][0]] = \
+                            [f'[unused{(i << 1) + 1}]', mention['type'], '*', '[unused0]']
+                    else:
+                        assert Config.entity_marker_type == 't-m'
+                        # sentences[mention['sent_id']][mention['pos'][0]] = \
+                        #     [f'[unused1]', mention['type'], '*', '[unused0]']
+                        sentences[mention['sent_id']][mention['pos'][0]] = \
+                            [mention['type'], '*', '[unused0]']
+                if Config.entity_marker_type != 't-m':
+                    sentences[mention['sent_id']][mention['pos'][1] - 1].append(f'[unused{(i + 1) << 1}]')
+                else:
+                    # sentences[mention['sent_id']][mention['pos'][1] - 1].append(f'[unused2]')
+                    pass
 
     word_position, document = [], ['[CLS]']
     for sent in sentences:
@@ -283,9 +297,11 @@ def process_single(data, mode: str, extra=None):
     # tail_pos += [[0] * Config.mention_padding] * (sample_limit - len(tail_pos))
     # types += [('', '')] * (sample_limit - len(types))
 
+    data.setdefault('real_idx', [])
+
     # document: sentence_num * token_num: 512
     # head/tail: sample_limit * mention_num: 3
     # labels: sample_limit * relation_num: 97
     # for training, return at most 90 pairs; for others, return at most 1800 pairs
     return Config.tokenizer.convert_tokens_to_ids(document), \
-        labels, head_pos, tail_pos, label_mask, attn_mask, pair_ids, types
+        labels, head_pos, tail_pos, label_mask, attn_mask, pair_ids, types, data['real_idx']

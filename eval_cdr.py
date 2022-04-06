@@ -72,7 +72,7 @@ if __name__ == '__main__':
     out_file = open(output_filename, 'w', encoding='utf-8')
     print(f'correct: {correct_num} instance: {instance_num} predict: {predict_num} in_train: {correct_in_train}')
     out_file.write(f'correct: {correct_num} instance: {instance_num} predict: {predict_num} '
-                   f'in_train: {correct_in_train}')
+                   f'in_train: {correct_in_train}\n')
     precision = correct_num / predict_num
     recall = correct_num / instance_num
     f1 = 2 * precision * recall / (precision + recall)
@@ -81,7 +81,7 @@ if __name__ == '__main__':
           f'RE_F1: {round(f1 * 100, 2)}')
     out_file.write(f'RE_PRECISION: {round(precision * 100, 2)}\n'
                    f'RE_RECALL: {round(recall * 100, 2)}\n'
-                   f'RE_F1: {round(f1 * 100, 2)}')
+                   f'RE_F1: {round(f1 * 100, 2)}\n')
 
     precision = correct_num / predict_num
     ing_precision = (correct_num - correct_in_train) / (predict_num - correct_in_train)
@@ -93,5 +93,5 @@ if __name__ == '__main__':
           f'RE_ignore_F1: {round(ing_f1 * 100, 2)}')
     out_file.write(f'RE_ignore_PRECISION: {round(ing_precision * 100, 2)}\n'
                    f'RE_ignore_RECALL: {round(recall * 100, 2)}\n'
-                   f'RE_ignore_F1: {round(ing_f1 * 100, 2)}')
+                   f'RE_ignore_F1: {round(ing_f1 * 100, 2)}\n')
     out_file.close()

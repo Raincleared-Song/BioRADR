@@ -10,7 +10,7 @@ import traceback
 import jsonlines
 from typing import Union, List, Tuple
 from timeit import default_timer as timer
-from requests.exceptions import ReadTimeout, ConnectionError
+from .search_utils import repeat_request
 
 
 def load_json(path: str):
@@ -50,21 +50,6 @@ class SpellHandler(xml.sax.handler.ContentHandler):
     def characters(self, content):
         if self.current_tag == 'CorrectedQuery' and content != '':
             self.result = content
-
-
-def repeat_request(url: str, max_time: int = 10):
-    for _ in range(max_time):
-        try:
-            content = requests.get(url, timeout=10).text
-            return content
-        except (ReadTimeout, ConnectionError):
-            print('\ntimeout!', file=sys.stderr)
-            time.sleep(1)
-        except IOError:
-            print('\nother exception timeout!', file=sys.stderr)
-            traceback.print_exc()
-            time.sleep(1)
-    raise RuntimeError('Request Failed!')
 
 
 def search_term(term: str, db: str = 'mesh', ret_max: int = 100):
@@ -187,7 +172,7 @@ def get_pmids(pmids: list, concepts: list = None, pmcid: bool = False):
                 l_pos = raw_text.find(strip_text[0])
                 assert l_pos != -1
                 sent_offset = section['offset'] + l_pos
-                section_types.append(section['infons']['section_type'])
+                section_types.append(section['infons']['type'])
 
                 if strip_text[-1] != '.':
                     strip_text += ' .'
@@ -215,7 +200,10 @@ def get_pmids(pmids: list, concepts: list = None, pmcid: bool = False):
                 'title': title,
                 'section_types': section_types,
                 'texts': texts,
-                'entities': annotations
+                'entities': annotations,
+                'year': doc['year'],
+                'authors': doc['authors'],
+                'journal': doc['journal'],
             }
         print(f'Got PubMed documents: {len(ret):04}/{len(pmids):04}', end='\r')
         start, end = end, end + 100
@@ -380,8 +368,8 @@ def pubtator_to_docred(doc, labels):
     title, text = doc['title'], ' '.join(doc['texts'])
     offset_to_sid = [-1000000] * len(text)
 
-    assert text[len(title)] == ' '
-    text = text[(len(title) + 1):]
+    assert len(text) == len(title) or text[len(title)] == ' '
+    text = text[(len(title) + 1):] if len(text) > len(title) else ''
 
     accu_sent_len, doc_sent = [], []
 
@@ -491,7 +479,10 @@ def pubtator_to_docred(doc, labels):
         'vertexSet': vertex_set,
         'title': title,
         'sents': doc_sent,
-        'labels': label_set
+        'labels': label_set,
+        'year': doc['year'],
+        'authors': doc['authors'],
+        'journal': doc['journal'],
     }
 
 

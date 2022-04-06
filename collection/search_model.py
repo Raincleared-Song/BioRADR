@@ -3,7 +3,7 @@ import torch
 import torch.nn as nn
 import numpy as np
 import torch.nn.functional as F
-from search_preprocess import TOKENIZER
+from .search_preprocess import TOKENIZER
 from transformers import BertModel
 
 
@@ -11,6 +11,7 @@ MODEL_CONFIG = {
     'hidden_size': 256,
     'bert_hidden': 768,
     'block_size': 64,
+    'use_group_bilinear': True,
     'bert_path': '../huggingface/scibert_scivocab_cased' if os.path.exists(
         '../huggingface/scibert_scivocab_cased') else 'allenai/scibert_scivocab_cased'
 }
@@ -26,10 +27,11 @@ class SearchRankModel(nn.Module):
         self.block_size = MODEL_CONFIG['block_size']
 
         self.bert = BertModel.from_pretrained(MODEL_CONFIG['bert_path'])
-        self.bilinear = nn.Linear(self.bert_hidden * self.block_size, self.rep_hidden)
+        if MODEL_CONFIG['use_group_bilinear']:
+            self.bilinear = nn.Linear(self.bert_hidden * self.block_size, self.rep_hidden)
+        else:
+            self.bilinear = nn.Bilinear(self.bert_hidden, self.bert_hidden, self.rep_hidden)
         self.linear_out = nn.Linear(self.rep_hidden, 1)
-
-        self.loss = nn.CrossEntropyLoss(ignore_index=-100)
 
     def forward(self, data, mode: str):
         assert mode == 'test'
@@ -44,7 +46,7 @@ class SearchRankModel(nn.Module):
         entity_lim = word_pos.shape[1]
         mention_lim = word_pos.shape[2]
 
-        embed_docu = process_long_input(self.bert, documents, attn_mask)
+        embed_docu = process_long_input(self.bert, documents, attn_mask, TOKENIZER)
         indices = torch.arange(0, batch_size).view(batch_size, 1, 1).repeat(1, entity_lim, mention_lim)
         entity_rep = embed_docu[indices, word_pos]
         entity_rep = torch.max(entity_rep, dim=2)[0]
@@ -55,20 +57,20 @@ class SearchRankModel(nn.Module):
         head_rep = entity_rep[indices, head_ids]
         tail_rep = entity_rep[indices, tail_ids]
 
-        head_rep = head_rep.view(batch_size, pair_num,
-                                 self.bert_hidden // self.block_size, self.block_size)
-        tail_rep = tail_rep.view(batch_size, pair_num,
-                                 self.bert_hidden // self.block_size, self.block_size)
-        rel_rep = (head_rep.unsqueeze(4) * tail_rep.unsqueeze(3)).view(batch_size, pair_num,
-                                                                       self.bert_hidden * self.block_size)
-        rel_rep = self.bilinear(rel_rep)
+        if MODEL_CONFIG['use_group_bilinear']:
+            head_rep = head_rep.view(batch_size, pair_num, self.bert_hidden // self.block_size, self.block_size)
+            tail_rep = tail_rep.view(batch_size, pair_num, self.bert_hidden // self.block_size, self.block_size)
+            rel_rep = (head_rep.unsqueeze(4) * tail_rep.unsqueeze(3)).view(batch_size, pair_num,
+                                                                           self.bert_hidden * self.block_size)
+            rel_rep = self.bilinear(rel_rep)
+        else:
+            rel_rep = self.bilinear(head_rep, tail_rep)
 
         score = self.linear_out(rel_rep).squeeze(2)
-
         return {'score': score, 'loss': 0, 'titles': data['titles']}
 
 
-def process_long_input(model, input_ids, attn_mask):
+def process_long_input(model, input_ids, attn_mask, tokenizer):
     """处理较长输入, 句子长度的上限是 1024"""
     n, c = input_ids.size()
     if c <= 512:
@@ -77,8 +79,8 @@ def process_long_input(model, input_ids, attn_mask):
             attention_mask=attn_mask
         )[0]
     else:
-        start_tokens = torch.tensor([TOKENIZER.cls_token_id]).to(input_ids)
-        end_tokens = torch.tensor([TOKENIZER.sep_token_id]).to(input_ids)
+        start_tokens = torch.tensor([tokenizer.cls_token_id]).to(input_ids)
+        end_tokens = torch.tensor([tokenizer.sep_token_id]).to(input_ids)
         len_start = start_tokens.size(0)
         len_end = end_tokens.size(0)
         new_input_ids, new_attn_mask, num_seg = [], [], []

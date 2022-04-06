@@ -5,8 +5,8 @@ import argparse
 import os
 from torch.utils.data import Dataset
 from torch.utils.data import DataLoader
-from search_model import SearchRankModel
-from search_preprocess import process_denoise
+from .search_model import SearchRankModel
+from .search_preprocess import process_denoise
 
 
 def init_model(args):
@@ -21,7 +21,8 @@ def init_args():
     os.system('export TOKENIZERS_PARALLELISM=false')
 
     arg_parser = argparse.ArgumentParser()
-    arg_parser.add_argument('--checkpoint', '-c', help='path of the checkpoint file', required=True, type=str)
+    arg_parser.add_argument('--checkpoint', '-c', help='path of the checkpoint file', type=str,
+                            default='checkpoint/ctd_all_celoss_p16_n15_denoise_tpmk4_ag1/7.pkl')
     arg_parser.add_argument('--seed', '-s', help='the random seed', default=66, type=int)
     arg_parser.add_argument('--batch_size', '-b', help='the batch size', default=16, type=int)
     arg_parser.add_argument('--device', '-d', help='the device name', default='cuda:0', type=str)

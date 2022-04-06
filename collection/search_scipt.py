@@ -1,9 +1,9 @@
 import random
 from tqdm import tqdm
-from ncbi_api import baidu_translate, fetch_uids, is_mesh_id, pubtator_to_docred, \
+from .ncbi_api import baidu_translate, fetch_uids, is_mesh_id, pubtator_to_docred, \
     search_get_pubmed
-from search_db import init_db, get_documents_by_pmids
-from search_utils import save_json, load_json, adaptive_load, fix_ner_by_search
+from .search_db import init_db, get_documents_by_pmids
+from .search_utils import save_json, load_json, adaptive_load, fix_ner_by_search
 
 
 def gen_pair_to_docs():
@@ -492,49 +492,12 @@ def temp_func():
     # ctd_finetune_cd_cg_combined 52 + dg -> 0 13 544
     # ctd_finetune_cd_dg_combined 44 + cg -> 9 23 2152
     # ctd_finetune_cd_dg_combined 52 + cg -> 18 37 2152
-    """
-    import numpy as np
-    task = 'ctd_finetune_cd_dg_combined'
-    pat = 'dev_cg'
-    scores = np.load(f'CTDRED/{task}/{pat}_score.npy')
-    titles = load_json(f'CTDRED/{task}/{pat}_pmid2range.json')
-    data = load_json(f'CTDRED/{pat}.json')
-    true_p, predict, instance = 0, 0, 0
-    correct_docs, predict_wrong = [], []
-    for doc in data:
-        instance += len(doc['labels'])
-        pos = titles[str(doc['pmid'])]
-        score_l = scores[pos[0]:pos[1]]
-        entities = doc['vertexSet']
-        entity_num = len(entities)
-        cur_idx = 0
-        label_set = set()
-        for lab in doc['labels']:
-            label_set.add((lab['h'], lab['t']))
-        for i in range(entity_num):
-            for j in range(entity_num):
-                if i == j:
-                    continue
-                score = score_l[cur_idx]
-                if score > 0.5:
-                    predict += 1
-                    if (i, j) in label_set:
-                        true_p += 1
-                        correct_docs.append((i, j, doc))
-                    else:
-                        predict_wrong.append((i, j, doc))
-                cur_idx += 1
-    print(true_p, predict, instance)
-    pre, rec = true_p / predict, true_p / instance
-    f1 = 2 * pre * rec / (pre + rec)
-    print(pre, rec, f1)
-    import random
-    from search_utils import print_json
-    with open('test_ins2.json', 'w') as f:
-        print_json(random.choice(correct_docs), f)
-    with open('test_ins3.json', 'w') as f:
-        print_json(random.choice(predict_wrong), f)
-    """
+
+    cdr_test = load_json('CDR/test_cdr.json')
+    candidates = []
+    for doc in cdr_test:
+        pass
+    exit()
 
     def tt(doc):
         entities = doc['vertexSet']
@@ -848,21 +811,10 @@ def gen_segment_annotation_files(pair, seg_idx):
 
 
 if __name__ == '__main__':
-    with open('manual/candidates2.txt', 'r') as fin:
-        lines = [line.strip() for line in fin.readlines()]
-    for lid, line in enumerate(lines):
-        if lid in [26]:
-            continue
-        print(f'fetching line:', lid, '......')
-        tokens = line.split('\t')
-        assert lid == int(tokens[0])
-        h_cid, t_cid = tokens[1], tokens[2]
-        # get_main_articles(f'{h_cid}&{t_cid}', lid)
-        # get_article_segments(f'{h_cid}&{t_cid}', lid)
-        gen_segment_annotation_files(f'{h_cid}&{t_cid}', lid)
     # get_main_articles()
     # get_article_segments()
     # gen_segment_annotation_files()
+    temp_func()
     exit()
     # get_gene_descriptions()
     # exit()

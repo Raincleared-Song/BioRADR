@@ -1,5 +1,5 @@
 import json
-from search_utils import adaptive_load, load_json
+from .search_utils import adaptive_load, load_json
 from peewee import IntegerField, TextField, AutoField, Model, SqliteDatabase
 
 

@@ -28,7 +28,10 @@ class DenoiseModel(nn.Module):
         self.block_size = Config.block_size
 
         self.bert = BertModel.from_pretrained(Config.bert_path)
-        self.bilinear = nn.Linear(self.bert_hidden * self.block_size, self.rep_hidden)
+        if Config.use_group_bilinear:
+            self.bilinear = nn.Linear(self.bert_hidden * self.block_size, self.rep_hidden)
+        else:
+            self.bilinear = nn.Bilinear(self.bert_hidden, self.bert_hidden, self.rep_hidden)
         self.linear_out = nn.Linear(self.rep_hidden, 1)
 
         self.loss = loss_map[Config.loss_func]()
@@ -63,13 +66,15 @@ class DenoiseModel(nn.Module):
         head_rep = entity_rep[indices, head_ids]
         tail_rep = entity_rep[indices, tail_ids]
 
-        head_rep = head_rep.view(batch_size, pair_num,
-                                 self.bert_hidden // self.block_size, self.block_size)
-        tail_rep = tail_rep.view(batch_size, pair_num,
-                                 self.bert_hidden // self.block_size, self.block_size)
-        rel_rep = (head_rep.unsqueeze(4) * tail_rep.unsqueeze(3)).view(batch_size, pair_num,
-                                                                       self.bert_hidden * self.block_size)
-        rel_rep = self.bilinear(rel_rep)
+        if Config.use_group_bilinear:
+            head_rep = head_rep.view(batch_size, pair_num, self.bert_hidden // self.block_size, self.block_size)
+            tail_rep = tail_rep.view(batch_size, pair_num, self.bert_hidden // self.block_size, self.block_size)
+            rel_rep = (head_rep.unsqueeze(4) * tail_rep.unsqueeze(3)).view(batch_size, pair_num,
+                                                                           self.bert_hidden * self.block_size)
+            rel_rep = self.bilinear(rel_rep)
+        else:
+            rel_rep = self.bilinear(head_rep, tail_rep)
+
         score = self.linear_out(rel_rep).squeeze(2)
         return {'score': score, 'loss': 0, 'titles': data['titles']}
 
@@ -128,13 +133,16 @@ class DenoiseModel(nn.Module):
         head_rep = ent_rep[indices, head_ids].view(batch_size, sample_size, negative_size, self.bert_hidden)
         tail_rep = ent_rep[indices, tail_ids].view(batch_size, sample_size, negative_size, self.bert_hidden)
 
-        head_rep = head_rep.view(batch_size, sample_size, negative_size,
-                                 self.bert_hidden // self.block_size, self.block_size)
-        tail_rep = tail_rep.view(batch_size, sample_size, negative_size,
-                                 self.bert_hidden // self.block_size, self.block_size)
-        rel_rep = (head_rep.unsqueeze(5) * tail_rep.unsqueeze(4)).view(batch_size, sample_size, negative_size,
-                                                                       self.bert_hidden * self.block_size)
-        rel_rep = self.bilinear(rel_rep)
+        if Config.use_group_bilinear:
+            head_rep = head_rep.view(batch_size, sample_size, negative_size,
+                                     self.bert_hidden // self.block_size, self.block_size)
+            tail_rep = tail_rep.view(batch_size, sample_size, negative_size,
+                                     self.bert_hidden // self.block_size, self.block_size)
+            rel_rep = (head_rep.unsqueeze(5) * tail_rep.unsqueeze(4)).view(batch_size, sample_size, negative_size,
+                                                                           self.bert_hidden * self.block_size)
+            rel_rep = self.bilinear(rel_rep)
+        else:
+            rel_rep = self.bilinear(head_rep, tail_rep)
 
         score = self.linear_out(rel_rep).squeeze(3).view(-1, negative_size)  # (16, 16)
         label = label.view(-1)
@@ -152,21 +160,24 @@ class DenoiseModel(nn.Module):
         head_rep2 = ent_rep2[indices, head2].view(batch_size, sample_size, negative_size, self.bert_hidden)
         tail_rep2 = ent_rep2[indices, tail2].view(batch_size, sample_size, negative_size, self.bert_hidden)
 
-        head_rep1 = head_rep1.view(batch_size, sample_size, negative_size,
-                                   self.bert_hidden // self.block_size, self.block_size)
-        tail_rep1 = tail_rep1.view(batch_size, sample_size, negative_size,
-                                   self.bert_hidden // self.block_size, self.block_size)
-        rel_rep1 = (head_rep1.unsqueeze(5) * tail_rep1.unsqueeze(4)).view(batch_size, sample_size, negative_size,
-                                                                          self.bert_hidden * self.block_size)
-        rel_rep1 = self.bilinear(rel_rep1)
-
-        head_rep2 = head_rep2.view(batch_size, sample_size, negative_size,
-                                   self.bert_hidden // self.block_size, self.block_size)
-        tail_rep2 = tail_rep2.view(batch_size, sample_size, negative_size,
-                                   self.bert_hidden // self.block_size, self.block_size)
-        rel_rep2 = (head_rep2.unsqueeze(5) * tail_rep2.unsqueeze(4)).view(batch_size, sample_size, negative_size,
-                                                                          self.bert_hidden * self.block_size)
-        rel_rep2 = self.bilinear(rel_rep2)
+        if Config.use_group_bilinear:
+            head_rep1 = head_rep1.view(batch_size, sample_size, negative_size,
+                                       self.bert_hidden // self.block_size, self.block_size)
+            tail_rep1 = tail_rep1.view(batch_size, sample_size, negative_size,
+                                       self.bert_hidden // self.block_size, self.block_size)
+            rel_rep1 = (head_rep1.unsqueeze(5) * tail_rep1.unsqueeze(4)).view(batch_size, sample_size, negative_size,
+                                                                              self.bert_hidden * self.block_size)
+            rel_rep1 = self.bilinear(rel_rep1)
+            head_rep2 = head_rep2.view(batch_size, sample_size, negative_size,
+                                       self.bert_hidden // self.block_size, self.block_size)
+            tail_rep2 = tail_rep2.view(batch_size, sample_size, negative_size,
+                                       self.bert_hidden // self.block_size, self.block_size)
+            rel_rep2 = (head_rep2.unsqueeze(5) * tail_rep2.unsqueeze(4)).view(batch_size, sample_size, negative_size,
+                                                                              self.bert_hidden * self.block_size)
+            rel_rep2 = self.bilinear(rel_rep2)
+        else:
+            rel_rep1 = self.bilinear(head_rep1, tail_rep1)
+            rel_rep2 = self.bilinear(head_rep2, tail_rep2)
 
         score1 = self.linear_out(rel_rep1).squeeze(3)  # (1, 16, 8)
         score2 = self.linear_out(rel_rep2).squeeze(3)  # (1, 16, 8)

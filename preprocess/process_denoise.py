@@ -42,7 +42,7 @@ def process_denoise_test(data, mode: str):
                      entities[i][0]['type'] == 'Chemical' and entities[j][0]['type'] == 'Disease']
         head_ids.append([pair[0] for pair in pairs])
         tail_ids.append([pair[1] for pair in pairs])
-        titles.append(doc[pmid_key])
+        titles.append(str(doc[pmid_key]))
 
     # dynamic pad positions
     entity_padding = max(len(item) for item in word_positions)
@@ -78,7 +78,7 @@ def process_document(data, mode: str):
     entities = data['vertexSet']
     for i, mentions in enumerate(entities):
         for mention in mentions:
-            if Config.entity_marker_type != 't':
+            if Config.entity_marker_type not in ['t', 't-m']:
                 tmp: list = sentences[mention['sent_id']][mention['pos'][0]]
                 if Config.entity_marker_type == 'mt':
                     # both mention and type
@@ -88,12 +88,24 @@ def process_document(data, mode: str):
                     # Config.entity_marker_type == 'm', only mention
                     sentences[mention['sent_id']][mention['pos'][0]] = [f'[unused{(i << 1) + 1}]'] + tmp
             else:
-                # Config.entity_marker_type == 't', blank all mention, only type
+                # Config.entity_marker_type in ['t', 't-m'], blank all mention, only type
+                # t-m: type, *, [MASK]
                 for pos in range(mention['pos'][0], mention['pos'][1]):
                     sentences[mention['sent_id']][pos] = []
-                sentences[mention['sent_id']][mention['pos'][0]] = \
-                    [f'[unused{(i << 1) + 1}]', mention['type'], '*', '[unused0]']
-            sentences[mention['sent_id']][mention['pos'][1] - 1].append(f'[unused{(i + 1) << 1}]')
+                if Config.entity_marker_type == 't':
+                    sentences[mention['sent_id']][mention['pos'][0]] = \
+                        [f'[unused{(i << 1) + 1}]', mention['type'], '*', '[unused0]']
+                else:
+                    assert Config.entity_marker_type == 't-m'
+                    # sentences[mention['sent_id']][mention['pos'][0]] = \
+                    #     [f'[unused1]', mention['type'], '*', '[unused0]']
+                    sentences[mention['sent_id']][mention['pos'][0]] = \
+                        [mention['type'], '*', '[unused0]']
+            if Config.entity_marker_type != 't-m':
+                sentences[mention['sent_id']][mention['pos'][1] - 1].append(f'[unused{(i + 1) << 1}]')
+            else:
+                # sentences[mention['sent_id']][mention['pos'][1] - 1].append(f'[unused2]')
+                pass
 
     word_position, document = [], ['[CLS]']
     for sent in sentences:

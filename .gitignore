@@ -10,6 +10,8 @@ Chemprot/
 CDR/
 manual/
 chosen_models/
+api/
+cases/
 
 collect.py
 download.py

@@ -4,16 +4,16 @@ from .config_base import ConfigBase
 
 
 class ConfigFineTune(ConfigBase):
-    data_path = {
-        'train': '../project-1/CTDRED/ctd_train.json',
-        'valid': '../project-1/CTDRED/ctd_dev.json',
-        'test': '../project-1/CTDRED/ctd_test.json'
-    }
     # data_path = {
-    #     'train': '../project-1/CDR/train_cdr.json',
-    #     'valid': '../project-1/CDR/dev_cdr.json',
-    #     'test': '../project-1/CDR/test_cdr.json'
+    #     'train': '../project-1/CTDRED/ctd_train.json',
+    #     'valid': '../project-1/CTDRED/ctd_dev.json',
+    #     'test': '../project-1/CTDRED/ctd_test.json'
     # }
+    data_path = {
+        'train': '../project-1/CDR/train_cdr.json',
+        'valid': '../project-1/CDR/dev_cdr.json',
+        'test': '../project-1/CDR/test_cdr.json'
+    }
     # data_path = {
     #     'train': 'CTDRED/train_mixed.json',
     #     'valid': 'CTDRED/dev.json',
@@ -64,12 +64,12 @@ class ConfigFineTune(ConfigBase):
     mention_padding = 3  # mention reserved for each entity
     # mention_padding = 1
     # train_sample_limit = 32  # max positive label number is 24
-    # train_sample_limit = 104  # cdr
-    train_sample_limit = 270  # CTD_binary
+    train_sample_limit = 104  # cdr
+    # train_sample_limit = 270  # CTD_binary
     train_sample_number = 60  # cdr_cdr_neg_sample
     # test_sample_limit = 1600
-    # test_sample_limit = 117  # cdr
-    test_sample_limit = 294  # CTD_binary
+    test_sample_limit = 117  # cdr
+    # test_sample_limit = 294  # CTD_binary
     # train_sample_limit = 80
     # test_sample_limit = 2886  # #chemical * #gene
     # train_sample_limit = 40
@@ -80,28 +80,30 @@ class ConfigFineTune(ConfigBase):
     # kept_pair_num = 80
     # score_sample_limit = 40
     # kept_pair_num = 40
-    do_validation = False
+    do_validation = True
     use_gpu = True
     gpu_device = 'cuda:0'
     hidden_size = 256
 
     optimizer = 'adamw'
-    learning_rate = 2e-5
+    learning_rate = 2e-5  ### ATTENTION! 2e-5 for cdr
     weight_decay = 0
     adam_epsilon = 1e-6
-    epoch_num = 60
+    from_epoch = 0
+    epoch_num = 40
+    real_epoch_num = 40
     warmup_ratio = 0.06
 
     output_step = 1
-    save_global_step = 800
+    save_global_step = -1
     crop_documents = False
     crop_mention_option = 0
-    entity_marker_type = 'mt'
-    assert crop_mention_option in [0, 1, 2]
-    assert entity_marker_type in ['mt', 'm', 't']
+    entity_marker_type = 'm'
+    assert crop_mention_option in [0, 1, 2, 3, 4]
+    assert entity_marker_type in ['mt', 'm', 't', 't-m']
     test_step = 1
     model_path = 'checkpoint'
-    model_name = 'ctd_all_celoss_softmax_finetune_ag'
+    model_name = 'cdr_finetune_type_pretrain_mark_typ_rep_0'
     fp16 = False
     lr_step_size = 1
     lr_gamma = 1

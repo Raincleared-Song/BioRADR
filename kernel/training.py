@@ -18,7 +18,7 @@ def train(config: ConfigBase, models, datasets, it=None):
     train_set = datasets['train']
     train_size = len(train_set)
 
-    total_epoch = config.epoch_num
+    real_epoch = config.real_epoch_num
     output_step = config.output_step
     test_step = config.test_step
     use_gpu = config.use_gpu
@@ -45,7 +45,7 @@ def train(config: ConfigBase, models, datasets, it=None):
     # exp_lr_scheduler = lr_scheduler.StepLR(optimizer, step_size=lr_step_size, gamma=gamma)
     # exp_lr_scheduler.step(trained_epoch + 1)
 
-    print(f'start training from epoch {trained_epoch + 1} to {total_epoch} ......')
+    print(f'start training from epoch {trained_epoch + 1} to {real_epoch} ......')
 
     # metric_out = open('tmp_tmp.txt', 'w', encoding='utf-8')
     # set_file(metric_out)
@@ -61,7 +61,7 @@ def train(config: ConfigBase, models, datasets, it=None):
     #             test(model, datasets, 'valid', config, valid_output_path, epoch)
     # return
 
-    for epoch in range(trained_epoch + 1, total_epoch):
+    for epoch in range(trained_epoch + 1, real_epoch):
         # for each epoch
         start_time = timer()
         # exp_lr_scheduler.step(epoch)

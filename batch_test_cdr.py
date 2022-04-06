@@ -1,6 +1,14 @@
 import os
 import json
+import argparse
 import subprocess
+import numpy as np
+
+
+def calculate_bound(x):
+    if x[0] < 1:
+        x = np.array(x) * 100
+    return f'{np.round(np.mean(x), 2)}±{np.round(np.std(x), 2)}'
 
 
 def test_cdr_model(model_name):
@@ -63,13 +71,21 @@ def test_cdr_model(model_name):
     print(valid_epochs, file=out_file)
     print(valid_f1)
     print(valid_f1, file=out_file)
+    print(calculate_bound(valid_f1))
+    print(calculate_bound(valid_f1), file=out_file)
     print(test_epochs)
     print(test_epochs, file=out_file)
     print(test_f1)
     print(test_f1, file=out_file)
+    print(calculate_bound(test_f1))
+    print(calculate_bound(test_f1), file=out_file)
     out_file.close()
     out_train.close()
 
 
 if __name__ == '__main__':
-    test_cdr_model('cdr_finetune_sci_base')
+    os.environ['MKL_SERVICE_FORCE_INTEL'] = '1'
+    arg_parser = argparse.ArgumentParser()
+    arg_parser.add_argument('--task', '-t', help='the model name', type=str, required=True)
+    args = arg_parser.parse_args()
+    test_cdr_model(args.task)

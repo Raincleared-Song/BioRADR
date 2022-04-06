@@ -24,7 +24,7 @@ class ConfigDenoise(ConfigBase):
     #     'test': None  # determined by terminal args
     # }
     batch_size = {
-        'train': 2,
+        'train': 1,
         'valid': 16,
         'test': 16
     }
@@ -69,16 +69,17 @@ class ConfigDenoise(ConfigBase):
     warmup_ratio = 0.06
 
     epoch_num = 30
+    real_epoch_num = 15
     output_step = 1
     save_global_step = 800
     crop_documents = False
-    crop_mention_option = 0
+    crop_mention_option = 4
     entity_marker_type = 'mt'
-    assert crop_mention_option in [0, 1, 2]
-    assert entity_marker_type in ['mt', 'm', 't']
+    assert crop_mention_option in [0, 1, 2, 3, 4]
+    assert entity_marker_type in ['mt', 'm', 't', 't-m']
     test_step = 1
     model_path = 'checkpoint'
-    model_name = 'ctd_all_celoss_p16_n15_denoise_ag'
+    model_name = 'ctd_all_celoss_p16_n15_denoise_mask4_ag1'
     fp16 = False
     lr_step_size = 1  # step_size
     lr_gamma = 1
@@ -87,6 +88,7 @@ class ConfigDenoise(ConfigBase):
     output_metric = 'binary_metric'
     kept_pair_num = None
 
+    use_group_bilinear = True
     positive_num = 16
     negative_num = 15
     use_inter = True

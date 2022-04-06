@@ -1,8 +1,13 @@
 import os
+import sys
 import json
+import time
+import requests
 import jsonlines
+import traceback
 from tqdm import tqdm
 from typing import List, Dict
+from requests.exceptions import ReadTimeout, ConnectionError
 
 
 def repeat_input(info: str, restrict=None, int_range=None):
@@ -17,6 +22,21 @@ def repeat_input(info: str, restrict=None, int_range=None):
             if not cont.isdigit() or int(cont) >= int_range[1] or int(cont) < int_range[0]:
                 print(f'input should be an integer and in {int_range}')
     return cont
+
+
+def repeat_request(url: str, max_time: int = 10):
+    for _ in range(max_time):
+        try:
+            content = requests.get(url, timeout=10).text
+            return content
+        except (ReadTimeout, ConnectionError):
+            print('\ntimeout!', file=sys.stderr)
+            time.sleep(1)
+        except IOError:
+            print('\nother exception timeout!', file=sys.stderr)
+            traceback.print_exc()
+            time.sleep(1)
+    raise RuntimeError('Request Failed!')
 
 
 def load_json(path: str):

@@ -5,34 +5,13 @@ import json
 import random
 import hashlib
 import xml.sax
+import logging
 import requests
 import traceback
 import jsonlines
 from typing import Union, List, Tuple
 from timeit import default_timer as timer
-from .search_utils import repeat_request
-
-
-def load_json(path: str):
-    print(f'loading file {path} ......')
-    file = open(path)
-    res = json.load(file)
-    file.close()
-    return res
-
-
-def save_json(obj: object, path: str):
-    print(f'saving file {path} ......')
-    file = open(path, 'w')
-    json.dump(obj, file)
-    file.close()
-
-
-def time_to_str(clock):
-    clock = int(clock)
-    minute = clock // 60
-    second = clock % 60
-    return '%2d:%02d' % (minute, second)
+from .search_utils import repeat_request, load_json, save_json, is_mesh_id, time_to_str
 
 
 class SpellHandler(xml.sax.handler.ContentHandler):
@@ -58,6 +37,7 @@ def search_term(term: str, db: str = 'mesh', ret_max: int = 100):
           f'&retmode=json&retmax={ret_max}&api_key=326042ba82c2800f8fcf63717f14d8063708'
     url = url.strip().replace(' ', '+')
     response = repeat_request(url)
+    logger = logging.getLogger('server')
     try:
         cont = json.loads(response)
         ret = cont['esearchresult']['idlist']
@@ -66,6 +46,7 @@ def search_term(term: str, db: str = 'mesh', ret_max: int = 100):
         print(file=err_log_global)
         print(type(err), err, file=err_log_global)
         print('json/key error:', url, response, file=err_log_global)
+        logger.error(f'json/key error: {url} {response}')
     return ret
 
 
@@ -78,13 +59,14 @@ def fetch_uids(uids: list, db: str = 'mesh'):
 
 
 def summary_uids(uids: list, db: str = 'mesh'):
+    logger = logging.getLogger('server')
     uid_str = ','.join(uids)
     """uid -> tuple[description, entry_terms (synonyms), link_entities, MeSH_ID]"""
     url = f'https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esummary.fcgi?db={db}&id={uid_str}&retmode=json' \
           f'&api_key=326042ba82c2800f8fcf63717f14d8063708'
     cont = json.loads(repeat_request(url))['result']
     if len(cont['uids']) != len(uids):
-        print(f'Summary Failed: {uid_str} result: {cont}', file=sys.stderr)
+        logger.error(f'Summary Failed: {uid_str} result: {cont}')
         return {}
     ret = {}
     for uid in cont['uids']:
@@ -138,6 +120,7 @@ def get_pmids(pmids: list, concepts: list = None, pmcid: bool = False):
     concept_str = ','.join(concepts)
     start, end = 0, 100
     ret = {}
+    logger = logging.getLogger('server')
     while start < end and start < len(pmids):
         pmid_str = ','.join(pmids[start:end])
         url = f'https://www.ncbi.nlm.nih.gov/research/pubtator-api/publications/export/biocjson?' \
@@ -154,6 +137,7 @@ def get_pmids(pmids: list, concepts: list = None, pmcid: bool = False):
                 print(file=err_log_global)
                 print(type(err), err, file=err_log_global)
                 print('json error:', url, js, file=err_log_global)
+                logger.error(f'json error: {url} {js}')
             if doc is None:
                 continue
             passages = doc['passages']
@@ -205,9 +189,8 @@ def get_pmids(pmids: list, concepts: list = None, pmcid: bool = False):
                 'authors': doc['authors'],
                 'journal': doc['journal'],
             }
-        print(f'Got PubMed documents: {len(ret):04}/{len(pmids):04}', end='\r')
+        logger.info(f'Got PubMed documents: {len(ret):04}/{len(pmids):04}')
         start, end = end, end + 100
-    print()
     return ret
 
 
@@ -242,14 +225,6 @@ def search_get_pubmed(entities: list, pmid_filter: set = None, ent_pair: tuple =
                 ret_null.append(info)
         ret = tmp_ret
     return ret, ret_null
-
-
-def print_json(obj):
-    print(json.dumps(obj, sort_keys=True, indent=4, separators=(', ', ': '), ensure_ascii=False))
-
-
-def is_mesh_id(cid: str):
-    return cid[0].isalpha() and cid[1:].isdigit()
 
 
 def baidu_translate(sent: Union[List[str], str]) -> Tuple[Union[List[str], str], int]:
@@ -344,6 +319,7 @@ def pubtator_to_docred(doc, labels):
     global mesh_convert
     if mesh_convert is None:
         mesh_convert = load_json('CTDRED/mesh_convert.json')
+    logger = logging.getLogger('server')
     offsets = []
     eid2offsets = {}
     for entity in doc['entities']:
@@ -450,7 +426,8 @@ def pubtator_to_docred(doc, labels):
             try:
                 assert 0 <= begin_pos < end_pos <= len(cur_sent)
             except AssertionError as err:
-                print(name, begin_pos, end_pos, cur_sent, start, end, doc['pmcid'])
+                logger.error(f'pubtator_to_docred: {name} {begin_pos} {end_pos} '
+                             f'{cur_sent} {start} {end} {doc["pmcid"]}')
                 raise err
             cur_entity.append({
                 'name': name,

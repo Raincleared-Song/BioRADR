@@ -3,14 +3,15 @@ import sys
 import copy
 import torch
 import spacy
+import logging
 import traceback
 import numpy as np
 from torch.autograd import Variable
-from .search_utils import load_json, repeat_input
-from .ncbi_api import search_get_pubmed, is_mesh_id, pubtator_to_docred, spell_term, summary_uids
+from .search_utils import load_json, repeat_input, setup_logger, is_mesh_id
+from .ncbi_api import search_get_pubmed, pubtator_to_docred, spell_term, summary_uids
 from .search_initialize import init_args, init_model, init_data
 from scispacy.linking import EntityLinker
-from scispacy.abbreviation import AbbreviationDetector
+# from scispacy.abbreviation import AbbreviationDetector
 
 
 GLOBAL = {
@@ -20,6 +21,7 @@ GLOBAL = {
     'disease_to_head_doc': {},
     'model': None,
     'args': None,
+    'logger': logging.getLogger('server'),
     'na_score': -1000,    # 不包含实体对时的默认得分
     'search_count': 100,  # 从 PubMed 搜索返回的最大文档数
 }
@@ -34,6 +36,7 @@ def init_spacy_gpu(args):
 def init_all():
     global GLOBAL
     args = init_args()
+    setup_logger('server', args.log_file, 'a', '[%(asctime)s]: %(levelname)s: %(message)s', logging.INFO)
 
     # init scispacy
     init_spacy_gpu(args)
@@ -41,7 +44,7 @@ def init_all():
     for _ in range(3):
         try:
             nlp = spacy.load('en_core_sci_lg')
-            nlp.add_pipe('abbreviation_detector')
+            # nlp.add_pipe('abbreviation_detector')
             nlp.add_pipe('scispacy_linker', config={'resolve_abbreviations': True, 'linker_name': 'mesh'})
             GLOBAL['linker'] = nlp
             nlp_init_err = None
@@ -63,6 +66,7 @@ def init_all():
 
 def link_entity(entity: str, spell=True):
     global GLOBAL
+    logger = GLOBAL['logger']
     if spell:
         entity = spell_term(entity)
     nlp = GLOBAL['linker']
@@ -70,7 +74,7 @@ def link_entity(entity: str, spell=True):
     if len(doc.ents) != 1:
         return '', f'{len(doc.ents)} entities found'
     kbs = doc.ents[0]._.kb_ents
-    print(entity, doc.ents[0]._.kb_ents, sep='\t')
+    logger.info(f'{entity}: {doc.ents[0]._.kb_ents}')
     if len(kbs) == 0:
         return '', 'link failed'
     cid = kbs[0][0]
@@ -89,6 +93,7 @@ def get_name_by_mesh_id(mesh_id: str):
 def search_pubmed_documents(cid1, cid2, cname1, cname2, filter_pmids: set):
     """从 PubMed API 取得语料"""
     global GLOBAL
+    logger = GLOBAL['logger']
     docs, docs_null = search_get_pubmed([cname1, cname2], pmid_filter=filter_pmids,
                                         ent_pair=(cid1, cid2), ret_max=GLOBAL['search_count'])
     exist_set = set()
@@ -100,8 +105,8 @@ def search_pubmed_documents(cid1, cid2, cname1, cname2, filter_pmids: set):
             ret_pos.append(pubtator_to_docred(val, []))
             exist_set.add(did)
         except Exception as err:
-            print('pubtator_to_docred error:', did, file=sys.stderr)
-            traceback.print_exception(type(err), err, sys.exc_info()[2], file=sys.stderr)
+            logger.error(f'pubtator_to_docred error: {did}')
+            logger.error(''.join(traceback.format_exception(type(err), err, sys.exc_info()[2])))
     for val in docs_null:
         did = int(val['pmid'])
         try:
@@ -109,8 +114,8 @@ def search_pubmed_documents(cid1, cid2, cname1, cname2, filter_pmids: set):
             ret_neg.append(pubtator_to_docred(val, []))
             exist_set.add(did)
         except Exception as err:
-            print('pubtator_to_docred error:', did, file=sys.stderr)
-            traceback.print_exception(type(err), err, sys.exc_info()[2], file=sys.stderr)
+            logger.error(f'pubtator_to_docred error: {did}')
+            logger.error(''.join(traceback.format_exception(type(err), err, sys.exc_info()[2])))
     return ret_pos, ret_neg
 
 
@@ -140,11 +145,12 @@ def model_score(docs: list, cid1: str, cid2: str):
     :return: score_doc_list
     """
     global GLOBAL
+    logger = GLOBAL['logger']
     if len(docs) == 0:
         return []
     model, args = GLOBAL['model'], GLOBAL['args']
     assert model is not None and args is not None
-    print(f'============ scoring {len(docs)} documents ============')
+    logger.info(f'scoring {len(docs)} documents')
     docs = [copy.deepcopy(doc) for doc in docs]
     # process documents
     for doc in docs:
@@ -182,6 +188,7 @@ def model_score(docs: list, cid1: str, cid2: str):
 
 def process_one_entity(key: str, offset=0, count=20):
     global GLOBAL
+    logger = GLOBAL['logger']
     init_spacy_gpu(GLOBAL['args'])
     if key == '':
         return 'empty key'
@@ -234,9 +241,8 @@ def process_one_entity(key: str, offset=0, count=20):
                     'meshterms': [get_name_by_mesh_id(cid)],
                     'idxlinks': [],
                 })
-        print(f'got: {len(results):04}/{len(candidates):04}', end='\r')
+        logger.info(f'got: {len(results):04}/{len(candidates):04}')
         start, end = end, end + batch_size
-    print()
     return {
         'is_head': is_head,
         'results': results,
@@ -246,6 +252,7 @@ def process_one_entity(key: str, offset=0, count=20):
 def process_two_entities(entity1: str, entity2: str):
     global GLOBAL
     init_spacy_gpu(GLOBAL['args'])
+    logger = GLOBAL['logger']
     na_score = GLOBAL['na_score']
     assert entity1 != '' and entity2 != ''
     entity1, cid1 = link_entity(entity1)
@@ -254,7 +261,7 @@ def process_two_entities(entity1: str, entity2: str):
     entity2, cid2 = link_entity(entity2)
     if entity2 == '':
         return 'tail entity link failure'
-    print(f'entity1: [{cid1}] entity2: [{cid2}]')
+    logger.info(f'entity1: [{cid1}] entity2: [{cid2}]')
 
     assert is_mesh_id(cid1) and is_mesh_id(cid2)
     cname1, cname2 = get_name_by_mesh_id(cid1), get_name_by_mesh_id(cid2)

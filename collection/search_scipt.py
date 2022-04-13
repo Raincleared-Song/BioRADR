@@ -1,7 +1,7 @@
+import re
 import random
 from tqdm import tqdm
-from .ncbi_api import baidu_translate, fetch_uids, is_mesh_id, pubtator_to_docred, \
-    search_get_pubmed
+from .ncbi_api import baidu_translate, fetch_uids, is_mesh_id, pubtator_to_docred, search_get_pubmed
 from .search_db import init_db, get_documents_by_pmids
 from .search_utils import save_json, load_json, adaptive_load, fix_ner_by_search
 
@@ -492,6 +492,35 @@ def temp_func():
     # ctd_finetune_cd_cg_combined 52 + dg -> 0 13 544
     # ctd_finetune_cd_dg_combined 44 + cg -> 9 23 2152
     # ctd_finetune_cd_dg_combined 52 + cg -> 18 37 2152
+
+    fin = open('test_paper.txt', 'r', encoding='utf-8')
+    lines = [line.strip() for line in fin.readlines()]
+    cur_title = ''
+    results = []
+    for line in lines:
+        if len(line) > 2 and line[0].isdigit() and line[1] == '.':
+            if cur_title != '':
+                print(cur_title, end=' ')
+                assert len(results) == 3
+                for idx in range(6):
+                    print(round((results[0][idx] + results[1][idx] + results[2][idx]) * 100 / 3, 2), end=' & ')
+                print()
+                results = []
+            cur_title = line.split(' ')[1]
+        if 'rank46' in line:
+            accuracies = re.findall(r'0\.[0-9]+', line)
+            assert len(accuracies) == 6
+            cur_res = [float(acc) for acc in accuracies]
+            cur_res.reverse()
+            results.append(cur_res)
+    if cur_title != '':
+        print(cur_title, end=' ')
+        assert len(results) == 3
+        for idx in range(6):
+            print(round((results[0][idx] + results[1][idx] + results[2][idx]) * 100 / 3, 2), end=' & ')
+        print()
+    fin.close()
+    exit()
 
     cdr_test = load_json('CDR/test_cdr.json')
     candidates = []

@@ -8,9 +8,9 @@ from torch.autograd import Variable
 from .ncbi_api import spell_term, is_mesh_id, search_get_pubmed, pubtator_to_docred
 from .search_utils import load_json, repeat_input
 from .search_initialize import init_args, init_model, init_data
+from .search_db import init_db, get_documents_by_pmids
 from scispacy.abbreviation import AbbreviationDetector
 from scispacy.linking import EntityLinker
-from .search_db import init_db, get_documents_by_pmids
 
 import warnings
 warnings.filterwarnings(action='ignore', module='.*?spacy.*?')

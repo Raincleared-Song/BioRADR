@@ -26,6 +26,7 @@ def init_args():
     arg_parser.add_argument('--seed', '-s', help='the random seed', default=66, type=int)
     arg_parser.add_argument('--batch_size', '-b', help='the batch size', default=16, type=int)
     arg_parser.add_argument('--device', '-d', help='the device name', default='cuda:0', type=str)
+    arg_parser.add_argument('--log_file', '-l', help='the log file path', default='./checkpoint/server.log', type=str)
     return arg_parser.parse_args()
 
 
@@ -39,7 +40,8 @@ def init_seed(seed):
     torch.cuda.manual_seed_all(seed)
     torch.backends.cudnn.deterministic = True
     torch.backends.cudnn.benchmark = False
-    determine = torch.use_deterministic_algorithms if torch.__version__ == '1.10.0' else torch.set_deterministic
+    determine = torch.use_deterministic_algorithms if 'use_deterministic_algorithms' in dir(torch) \
+        else torch.set_deterministic
     determine(True)
     os.environ['CUBLAS_WORKSPACE_CONFIG'] = ':16:8'
 
@@ -78,10 +80,10 @@ def init_data(args, docs: list):
 
 
 def init_models(args):
-    torch.cuda.set_device(args.device)
     model = SearchRankModel()
     use_gpu = args.device.strip().lower().startswith('cuda')
     if use_gpu:
+        torch.cuda.set_device(args.device)
         model = model.to(args.device)
         os.environ["CUDA_VISIBLE_DEVICES"] = '0,1,2,3'
         os.system("export CUDA_VISIBLE_DEVICES=0,1,2,3")

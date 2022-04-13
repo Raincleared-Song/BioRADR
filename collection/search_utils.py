@@ -1,7 +1,7 @@
 import os
-import sys
 import json
 import time
+import logging
 import requests
 import jsonlines
 import traceback
@@ -25,22 +25,24 @@ def repeat_input(info: str, restrict=None, int_range=None):
 
 
 def repeat_request(url: str, max_time: int = 10):
+    logger = logging.getLogger('server')
     for _ in range(max_time):
         try:
             content = requests.get(url, timeout=10).text
             return content
         except (ReadTimeout, ConnectionError):
-            print('\ntimeout!', file=sys.stderr)
+            logger.warning('repeat_request: timeout!')
             time.sleep(1)
         except IOError:
-            print('\nother exception timeout!', file=sys.stderr)
+            logger.warning('repeat_request: other exception timeout!')
             traceback.print_exc()
             time.sleep(1)
     raise RuntimeError('Request Failed!')
 
 
 def load_json(path: str):
-    print(f'loading file {path} ......')
+    logger = logging.getLogger('server')
+    logger.info(f'loading file {path} ......')
     file = open(path)
     res = json.load(file)
     file.close()
@@ -48,7 +50,8 @@ def load_json(path: str):
 
 
 def save_json(obj: object, path: str):
-    print(f'saving file {path} ......')
+    logger = logging.getLogger('server')
+    logger.info(f'saving file {path} ......')
     file = open(path, 'w')
     json.dump(obj, file)
     file.close()
@@ -68,6 +71,17 @@ def adaptive_load(path: str):
 
 def print_json(obj, file=None):
     print(json.dumps(obj, indent=4, separators=(', ', ': '), ensure_ascii=False), file=file)
+
+
+def is_mesh_id(cid: str):
+    return cid[0].isalpha() and cid[1:].isdigit()
+
+
+def time_to_str(clock):
+    clock = int(clock)
+    minute = clock // 60
+    second = clock % 60
+    return '%2d:%02d' % (minute, second)
 
 
 def fix_ner_by_search(documents: list):
@@ -144,3 +158,13 @@ def fix_ner_by_search(documents: list):
             update_cnt += 1
     p_bar.close()
     return all_cnt, update_cnt
+
+
+def setup_logger(logger_name, log_file, log_mode, log_format, log_level) -> logging.Logger:
+    handler = logging.FileHandler(log_file, mode=log_mode)
+    formatter = logging.Formatter(log_format)
+    handler.setFormatter(formatter)
+    logger = logging.getLogger(logger_name)
+    logger.setLevel(log_level)
+    logger.addHandler(handler)
+    return logger

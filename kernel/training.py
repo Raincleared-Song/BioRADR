@@ -72,7 +72,8 @@ def train(config: ConfigBase, models, datasets, it=None):
         time_spent = 0
         metric_json = ''
         train_steps = config.train_steps
-        determine = torch.use_deterministic_algorithms if torch.__version__ == '1.10.0' else torch.set_deterministic
+        determine = torch.use_deterministic_algorithms if 'use_deterministic_algorithms' in dir(torch) \
+        else torch.set_deterministic
 
         assert len(train_set) > 0
 

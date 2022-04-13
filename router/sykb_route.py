@@ -15,10 +15,25 @@ Version:
 """
 from . import app
 import json
-from flask import make_response, request
+import logging
+from flask import make_response, request, Response
 from collection import process_two_entities, process_one_entity
 from collection.search_utils import save_json, repeat_request
 from collection.ncbi_api import is_mesh_id, summary_uids
+
+
+server_log = logging.getLogger('server')
+
+
+@app.after_request
+def after(response: Response) -> Response:
+    server_log.info(f'After {request.method} request by {request.remote_addr} url: {request.url} {response.status}')
+    return response
+
+
+@app.before_request
+def before():
+    server_log.info(f'Before {request.method} request by {request.remote_addr} url: {request.url}')
 
 
 @app.route("/thunlp/demo/sykb/api/search", methods=["GET"])

@@ -75,7 +75,8 @@ def init_seed(seed):
     global_loader_generator.manual_seed(seed)
     torch.backends.cudnn.deterministic = True
     torch.backends.cudnn.benchmark = False
-    determine = torch.use_deterministic_algorithms if torch.__version__ == '1.10.0' else torch.set_deterministic
+    determine = torch.use_deterministic_algorithms if 'use_deterministic_algorithms' in dir(torch) \
+        else torch.set_deterministic
     determine(True)
     os.environ['CUBLAS_WORKSPACE_CONFIG'] = ':16:8'
 
@@ -136,10 +137,10 @@ def init_data(args):
 
 def init_models(args):
     config: ConfigBase = task_to_config[args.task]
-    torch.cuda.set_device(config.gpu_device)
     model = task_to_model[args.task]()
     trained_epoch, global_step = -1, 0
     if config.use_gpu:
+        torch.cuda.set_device(config.gpu_device)
         model = model.to(config.gpu_device)
         os.environ["CUDA_VISIBLE_DEVICES"] = '0,1,2,3'
         os.system("export CUDA_VISIBLE_DEVICES=0,1,2,3")

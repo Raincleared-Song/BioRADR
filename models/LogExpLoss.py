@@ -3,7 +3,8 @@ import torch.nn as nn
 from config import ConfigDenoise as Config
 
 
-determine = torch.use_deterministic_algorithms if torch.__version__ == '1.10.0' else torch.set_deterministic
+determine = torch.use_deterministic_algorithms if 'use_deterministic_algorithms' in dir(torch) \
+        else torch.set_deterministic
 
 
 class LogExpLoss(nn.Module):

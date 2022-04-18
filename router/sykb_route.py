@@ -96,6 +96,11 @@ def sykb_docinfo():
         return make_response({"success": False, "data": {"error_msg": f"get pmid {pmid} failed"}}, 400)
 
     response = {
+        'pmid': data['pmid'],
+        'journal': data['journal'],
+        'year': data['year'],
+        'authors': ", ".join(data['authors']),
+        'accessions': data['accessions'],
         'segments': data['passages'],
         'error_msg': '',
     }

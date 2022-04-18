@@ -36,7 +36,7 @@ def before():
     server_log.info(f'Before {request.method} request by {request.remote_addr} url: {request.url}')
 
 
-@app.route("/thunlp/demo/sykb/api/search", methods=["GET"])
+@app.route("/sykb/api/search", methods=["GET"])
 def sykb_search():
     head = request.args.get('head', '', type=str).strip()
     tail = request.args.get('tail', '', type=str).strip()
@@ -73,7 +73,7 @@ def sykb_search():
     return make_response({"success": True, "data": response}, 200)
 
 
-@app.route("/thunlp/demo/sykb/api/docinfo", methods=["GET"])
+@app.route("/sykb/api/docinfo", methods=["GET"])
 def sykb_docinfo():
     pmid = request.args.get('pmid', '', type=str).strip()
     if pmid == '':
@@ -96,33 +96,16 @@ def sykb_docinfo():
         return make_response({"success": False, "data": {"error_msg": f"get pmid {pmid} failed"}}, 400)
 
     response = {
-        'pmid': data['pmid'],
-        'journal': data['journal'],
-        'year': data['year'],
-        'authors': ", ".join(data['authors']),
-        'accessions': data['accessions'],
+        'segments': data['passages'],
         'error_msg': '',
     }
-    for item in data['passages']:
-        if item['infons']['type'] == 'title':
-            title = item['text']
-            # 标题高亮
-            title = get_annotation(item, title)
-
-            response['title'] = title
-        if item['infons']['type'] == 'abstract':
-            abstract = item['text']
-            # 标题高亮
-            abstract = get_annotation(item, abstract)
-
-            response['abstract'] = abstract
 
     save_json(request.args.to_dict(), 'cases/req_docinfo.json')
     save_json(response, 'cases/res_docinfo.json')
     return make_response({"success": True, "data": response}, 200)
 
 
-@app.route("/thunlp/demo/sykb/api/entinfo", methods=["GET"])
+@app.route("/sykb/api/entinfo", methods=["GET"])
 def sykb_entinfo():
     mesh_id = request.args.get('meshid', '', type=str).strip()
     if mesh_id == '':
@@ -148,7 +131,7 @@ def sykb_entinfo():
     return make_response({"success": True, "data": response}, 200)
 
 
-@app.route("/thunlp/demo/sykb/api/search_ent", methods=["GET"])
+@app.route("/sykb/api/search_ent", methods=["GET"])
 def sykb_search_ent():
     key = request.args.get('key', '', type=str).strip()
     page_index = request.args.get('pageIndex', 1, type=int)
@@ -170,26 +153,3 @@ def sykb_search_ent():
     save_json(request.args.to_dict(), 'cases/req_search_ent.json')
     save_json(response, 'cases/res_search_ent.json')
     return make_response({"success": True, "data": response}, 200)
-
-
-def replace_index(text, start, end, rep_text):
-    return f'{text[:start]}{rep_text}{text[end:]}'
-
-
-def get_annotation(item, source):
-    target = source
-    annotations = []
-    if item['annotations']:
-        for tag in item['annotations']:
-            text = tag['text']
-            offset = tag['locations'][0]['offset'] - item['offset']
-            length = tag['locations'][0]['length']
-            end = offset + length
-            ent_type = tag['infons']['type']
-            annotations.append((text, offset, end, ent_type))
-    annotations = annotations[::-1]
-
-    for text, start, end, ent_type in annotations:
-        tag_text = f'<a style="background-color: #e6a23c;border-color: #e6a23c;color: #fff;border-radius: 5px; padding:5px;" onclick="show_entity(\'{ent_type}\')">{text}</a>'
-        target = replace_index(target, start, end, tag_text)
-    return target

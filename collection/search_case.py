@@ -198,23 +198,27 @@ def process_one_entity(key: str, offset=0, count=20):
     assert is_mesh_id(key_cid)
     chemical_to_tail_doc = GLOBAL['chemical_to_tail_doc']
     disease_to_head_doc = GLOBAL['disease_to_head_doc']
-    candidates, candidate_cids = [], []
+    candidate_cnt = {}
     if key_cid in chemical_to_tail_doc:
         for cid2, _ in chemical_to_tail_doc[key_cid]:
             # 只取 MeSH 的实体
             if is_mesh_id(cid2):
-                candidates.append(str(ord(cid2[0])) + cid2[1:])
-                candidate_cids.append(cid2)
+                candidate_cnt.setdefault(cid2, 0)
+                candidate_cnt[cid2] += 1
         is_head = True
     elif key_cid in disease_to_head_doc:
         for cid1, _ in chemical_to_tail_doc[key_cid]:
             # 只取 MeSH 的实体
             if is_mesh_id(cid1):
-                candidates.append(str(ord(cid1[0])) + cid1[1:])
-                candidate_cids.append(cid1)
+                candidate_cnt.setdefault(cid1, 0)
+                candidate_cnt[cid1] += 1
         is_head = False
     else:
         return 'no entity related in MeSH'
+    # sort by count
+    candidate_cnt = sorted(list(candidate_cnt.items()), key=lambda x: x[1], reverse=True)
+    candidate_cids = [cid for cid, _ in candidate_cnt]
+    candidates = [(str(ord(cid[0])) + cid[1:]) for cid in candidate_cids]
     results = []
     batch_size = 20
     start, end = 0, batch_size

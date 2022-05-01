@@ -14,7 +14,7 @@ def eval_multi_label(predict_out, labels, label_mask, eval_res: dict = None):
             'auc_item': []  # [(is_correct, score)]
         }
     assert len(labels[0]) == len(predict_out[0])
-    score_list, predict_label = torch.max(predict_out, dim=1)
+    _, predict_label = torch.max(predict_out, dim=1)
     na_id = ConfigBase.label2id['NA']
     for i in range(len(predict_label)):
         if int(label_mask[i]) == 0:  # null label
@@ -26,7 +26,6 @@ def eval_multi_label(predict_out, labels, label_mask, eval_res: dict = None):
             continue
         eval_res['predict_num'] += 1
         predict_right = int(labels[i][pre_lab]) == 1
-        eval_res['auc_item'].append((int(predict_right), float(score_list[i])))
         if predict_right:
             eval_res['correct_num'] += 1
     return eval_res

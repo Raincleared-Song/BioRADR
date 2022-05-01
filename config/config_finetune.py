@@ -86,24 +86,25 @@ class ConfigFineTune(ConfigBase):
     hidden_size = 256
 
     optimizer = 'adamw'
-    learning_rate = 2e-5  ### ATTENTION! 2e-5 for cdr
+    learning_rate = 4e-4  ### ATTENTION! 2e-5 for cdr, 4e-4 group default for DocuNet
     weight_decay = 0
     adam_epsilon = 1e-6
     from_epoch = 0
-    epoch_num = 40
-    real_epoch_num = 40
+    epoch_num = 30
+    real_epoch_num = 30
     warmup_ratio = 0.06
 
     output_step = 1
     save_global_step = -1
     crop_documents = False
     crop_mention_option = 0
-    entity_marker_type = 'm'
+    entity_marker_type = 'm*'
     assert crop_mention_option in [0, 1, 2, 3, 4]
-    assert entity_marker_type in ['mt', 'm', 't', 't-m']
+    assert entity_marker_type in ['mt', 'm', 't', 't-m', 'm*']
     test_step = 1
     model_path = 'checkpoint'
-    model_name = 'cdr_finetune_type_pretrain_mark_typ_rep_0'
+    model_name = 'cdr_finetune_docunet_men_base_star_rep'
+    model_class = 'DocuNetFinetune'
     fp16 = False
     lr_step_size = 1
     lr_gamma = 1

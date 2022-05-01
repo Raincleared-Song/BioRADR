@@ -8,8 +8,9 @@ from apex import amp
 from preprocess import task_to_process
 from datasets import task_to_dataset
 from config import task_to_config, ConfigBase
-from models import task_to_model
+from models import name_to_model
 from torch.utils.data import DataLoader
+from transformers.optimization import AdamW
 
 
 def init_all(seed=None):
@@ -137,15 +138,28 @@ def init_data(args):
 
 def init_models(args):
     config: ConfigBase = task_to_config[args.task]
-    model = task_to_model[args.task]()
+    model = name_to_model[config.model_class]()
     trained_epoch, global_step = -1, 0
     if config.use_gpu:
         torch.cuda.set_device(config.gpu_device)
         model = model.to(config.gpu_device)
-        os.environ["CUDA_VISIBLE_DEVICES"] = '0,1,2,3'
-        os.system("export CUDA_VISIBLE_DEVICES=0,1,2,3")
-    optimizer = config.optimizer_dict[config.optimizer](
-        model.parameters(), lr=config.learning_rate, weight_decay=config.weight_decay, eps=config.adam_epsilon)
+        os.environ["CUDA_VISIBLE_DEVICES"] = '0,1,2,3,4,5,6,7'
+        os.system("export CUDA_VISIBLE_DEVICES=0,1,2,3,4,5,6,7")
+
+    if config.model_class not in ('DocuNetFinetune', 'DocuNetDenoise'):
+        optimizer = config.optimizer_dict[config.optimizer](
+            model.parameters(), lr=config.learning_rate, weight_decay=config.weight_decay, eps=config.adam_epsilon)
+    else:
+        print('Using DocuNet optimizer parameter groups ......')
+        extract_layer = ["extractor", "bilinear"]
+        bert_layer = ['bert_model']
+        optimizer_grouped_parameters = [
+            {"params": [p for n, p in model.named_parameters() if any(nd in n for nd in bert_layer)], "lr": 3e-5},
+            {"params": [p for n, p in model.named_parameters() if any(nd in n for nd in extract_layer)], "lr": 1e-4},
+            {"params": [p for n, p in model.named_parameters() if
+                        not any(nd in n for nd in extract_layer + bert_layer)]},
+        ]
+        optimizer = AdamW(optimizer_grouped_parameters, lr=config.learning_rate, eps=config.adam_epsilon)
 
     if args.checkpoint is None:
         if args.mode == 'test':

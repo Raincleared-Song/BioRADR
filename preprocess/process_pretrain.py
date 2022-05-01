@@ -223,8 +223,8 @@ def process_document(data, mode: str, mention_mask: list = None):
     # pad each document
     if len(document) < Config.token_padding:
         document.append('[SEP]')
-        document += ['[PAD]'] * (Config.token_padding - len(document))
         attn_mask = [1] * len(document) + [0] * (Config.token_padding - len(document))
+        document += ['[PAD]'] * (Config.token_padding - len(document))
     else:
         document = document[:(Config.token_padding - 1)] + ['[SEP]']
         attn_mask = [1] * Config.token_padding

@@ -1,5 +1,5 @@
 import os
-import json
+# import json
 from transformers import AutoTokenizer
 from torch.optim import Adam, SGD
 from transformers.optimization import AdamW
@@ -48,16 +48,18 @@ class ConfigBase:
 
     # __file = open('CTDRED/relation_to_id.json')
     # __file = open('CTDRED/relation_to_id_cdr.json')
-    __file = open('CDR/rel2id.json')
+    # __file = open('CDR/rel2id.json')
     # __file = open('Chemprot/chemprot_relation_to_id.json')
-    label2id = json.load(__file)
-    __file.close()
+    # label2id = json.load(__file)
+    # __file.close()
+    label2id = {"NA": 0, "Pos": 1}
 
     # __file = open('CTDRED/id_to_relation.json')
-    __file = open('CDR/id2rel.json')
+    # __file = open('CDR/id2rel.json')
     # __file = open('Chemprot/chemprot_id_to_relation.json')
-    id2label = json.load(__file)
-    __file.close()
+    # id2label = json.load(__file)
+    # __file.close()
+    id2label = ["NA", "Pos"]
 
     seed = 66
 
@@ -89,6 +91,7 @@ class ConfigBase:
     optimizer: str
     model_path: str
     model_name: str
+    model_class: str
     bert_path: str
 
     learning_rate: float

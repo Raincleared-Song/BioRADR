@@ -19,7 +19,8 @@ def process_denoise_test(data, mode: str):
 
     global use_cp
     use_cp = 'chemprot' in Config.data_path[mode].lower()
-    documents, attn_masks, word_positions, head_ids, tail_ids, pos_ids, titles = [], [], [], [], [], [], []
+    documents, attn_masks, word_positions, head_ids, tail_ids, pos_ids, titles, pair_ids = \
+        [], [], [], [], [], [], [], []
     pmid_key = 'pmid' if len(data) > 0 and 'pmid' in data[0] else 'pmsid'
     for doc in data:
         document, attn_mask, position = process_document(doc, mode)
@@ -40,6 +41,7 @@ def process_denoise_test(data, mode: str):
             entities = doc['vertexSet']
             pairs = [(i, j) for i in range(entity_num) for j in range(entity_num) if
                      entities[i][0]['type'] == 'Chemical' and entities[j][0]['type'] == 'Disease']
+        pair_ids.append(pairs)
         head_ids.append([pair[0] for pair in pairs])
         tail_ids.append([pair[1] for pair in pairs])
         titles.append(str(doc[pmid_key]))
@@ -65,7 +67,8 @@ def process_denoise_test(data, mode: str):
         'head_ids': torch.LongTensor(head_ids),
         'tail_ids': torch.LongTensor(tail_ids),
         'titles': titles,
-        'sample_counts': sample_counts
+        'sample_counts': sample_counts,
+        'pair_ids': pair_ids,
     }
 
 
@@ -84,6 +87,8 @@ def process_document(data, mode: str):
                     # both mention and type
                     sentences[mention['sent_id']][mention['pos'][0]] = \
                         [f'[unused{(i << 1) + 1}]', mention['type'], '*'] + tmp
+                elif Config.entity_marker_type == 'm*':
+                    sentences[mention['sent_id']][mention['pos'][0]] = ['*'] + tmp
                 else:
                     # Config.entity_marker_type == 'm', only mention
                     sentences[mention['sent_id']][mention['pos'][0]] = [f'[unused{(i << 1) + 1}]'] + tmp
@@ -101,7 +106,9 @@ def process_document(data, mode: str):
                     #     [f'[unused1]', mention['type'], '*', '[unused0]']
                     sentences[mention['sent_id']][mention['pos'][0]] = \
                         [mention['type'], '*', '[unused0]']
-            if Config.entity_marker_type != 't-m':
+            if Config.entity_marker_type == 'm*':
+                sentences[mention['sent_id']][mention['pos'][1] - 1].append('*')
+            elif Config.entity_marker_type != 't-m':
                 sentences[mention['sent_id']][mention['pos'][1] - 1].append(f'[unused{(i + 1) << 1}]')
             else:
                 # sentences[mention['sent_id']][mention['pos'][1] - 1].append(f'[unused2]')
@@ -118,8 +125,8 @@ def process_document(data, mode: str):
     # pad each document
     if len(document) < Config.token_padding:
         document.append('[SEP]')
-        document += ['[PAD]'] * (Config.token_padding - len(document))
         attn_mask = [1] * len(document) + [0] * (Config.token_padding - len(document))
+        document += ['[PAD]'] * (Config.token_padding - len(document))
     else:
         document = document[:(Config.token_padding - 1)] + ['[SEP]']
         attn_mask = [1] * Config.token_padding
@@ -153,11 +160,13 @@ def process_denoise_train(data, mode: str):
     # intra-document
     rd_head_ids1, rd_head_ids2 = [], []
     rd_tail_ids1, rd_tail_ids2 = [], []
+    rd_pair_ids1, rd_pair_ids2 = [], []
     rd_label1, rd_label2 = [], []
 
     # inter-document
     rd_head_ids1_x, rd_head_ids2_x = [], []
     rd_tail_ids1_x, rd_tail_ids2_x = [], []
+    rd_pair_ids1_x, rd_pair_ids2_x = [], []
     rd_label_x = []
 
     for item in data:
@@ -174,23 +183,27 @@ def process_denoise_train(data, mode: str):
         positions2.append(pos)
 
         # intra RD
-        head, tail, label = process_intra_rank(doc1)
+        head, tail, pair_ids, label = process_intra_rank(doc1)
         rd_head_ids1.append(head)
         rd_tail_ids1.append(tail)
+        rd_pair_ids1.append(pair_ids)
         rd_label1.append(label)
 
-        head, tail, label = process_intra_rank(doc2)
+        head, tail, pair_ids, label = process_intra_rank(doc2)
         rd_head_ids2.append(head)
         rd_tail_ids2.append(tail)
+        rd_pair_ids2.append(pair_ids)
         rd_label2.append(label)
 
         # inter RD
         if Config.use_inter:
-            head1, tail1, head2, tail2, label = process_inter_rank(doc1, doc2)
+            head1, tail1, head2, tail2, pair_ids1, pair_ids2, label = process_inter_rank(doc1, doc2)
             rd_head_ids1_x.append(head1)
             rd_head_ids2_x.append(head2)
             rd_tail_ids1_x.append(tail1)
             rd_tail_ids2_x.append(tail2)
+            rd_pair_ids1_x.append(pair_ids1)
+            rd_pair_ids2_x.append(pair_ids2)
             rd_label_x.append(label)
 
     # dynamically padding positions
@@ -216,6 +229,8 @@ def process_denoise_train(data, mode: str):
         'rd_head_ids2': torch.LongTensor(rd_head_ids2),
         'rd_tail_ids1': torch.LongTensor(rd_tail_ids1),
         'rd_tail_ids2': torch.LongTensor(rd_tail_ids2),
+        'rd_pair_ids1': rd_pair_ids1,
+        'rd_pair_ids2': rd_pair_ids2,
         'rd_label1': torch.LongTensor(rd_label1),
         'rd_label2': torch.LongTensor(rd_label2),
 
@@ -223,6 +238,8 @@ def process_denoise_train(data, mode: str):
         'rd_head_ids2_x': torch.LongTensor(rd_head_ids2_x),
         'rd_tail_ids1_x': torch.LongTensor(rd_tail_ids1_x),
         'rd_tail_ids2_x': torch.LongTensor(rd_tail_ids2_x),
+        'rd_pair_ids1_x': rd_pair_ids1_x,
+        'rd_pair_ids2_x': rd_pair_ids2_x,
         'rd_label_x': torch.LongTensor(rd_label_x),
     }
 
@@ -246,11 +263,12 @@ def process_intra_rank(data):
     positive_pairs, negative_pairs = get_pos_neg_pairs(data)
 
     sample_limit = Config.positive_num
-    head_ids, tail_ids, label_ids = [], [], []
+    head_ids, tail_ids, label_ids, pair_ids = [], [], [], []
     if len(positive_pairs) == 0:
         head_ids = tail_ids = [[0] * (Config.negative_num + 1)] * sample_limit
+        pair_ids = [[(0, 0)] * (Config.negative_num + 1)] * sample_limit
         label_ids = [-100] * sample_limit
-        return head_ids, tail_ids, label_ids
+        return head_ids, tail_ids, pair_ids, label_ids
 
     if Config.loss_func.startswith('contrastive'):
         # contrastive learning
@@ -267,6 +285,7 @@ def process_intra_rank(data):
     for i in range(sample_limit):
         head_ids.append([])
         tail_ids.append([])
+        pair_ids.append([])
 
         negative_samples = random.sample(negative_pairs, Config.negative_num)
         pos = random.randint(0, Config.negative_num)
@@ -275,7 +294,8 @@ def process_intra_rank(data):
         for pair in pairs:
             head_ids[-1].append(pair[0])
             tail_ids[-1].append(pair[1])
-    return head_ids, tail_ids, label_ids
+            pair_ids[-1].append(pair)
+    return head_ids, tail_ids, pair_ids, label_ids
 
 
 def process_inter_rank(data1, data2):
@@ -283,12 +303,14 @@ def process_inter_rank(data1, data2):
     positive_pairs2, negative_pairs2 = get_pos_neg_pairs(data2)
 
     head_ids1, tail_ids1, head_ids2, tail_ids2, label_ids = [], [], [], [], []
+    pair_ids1, pair_ids2 = [], []
     assert Config.negative_num % 2 == 1
     half_sample_num = (Config.negative_num + 1) // 2
     if len(positive_pairs1) == 0 or len(positive_pairs2) == 0:
         head_ids1 = head_ids2 = tail_ids1 = tail_ids2 = [[0] * half_sample_num] * 3
+        pair_ids1 = pair_ids2 = [[(0, 0)] * half_sample_num] * 3
         label_ids = [-100] * 3
-        return head_ids1, tail_ids1, head_ids2, tail_ids2, label_ids
+        return head_ids1, tail_ids1, head_ids2, tail_ids2, pair_ids1, pair_ids2, label_ids
 
     if Config.loss_func.startswith('contrastive'):
         # contrastive learning
@@ -306,15 +328,19 @@ def process_inter_rank(data1, data2):
                 label_ids.append(-1)
             head_ids1.append([chosen_pair1[0]])
             tail_ids1.append([chosen_pair1[1]])
+            pair_ids1.append([chosen_pair1])
             head_ids2.append([chosen_pair2[0]])
             tail_ids2.append([chosen_pair2[1]])
-        return head_ids1, tail_ids1, head_ids2, tail_ids2, label_ids
+            pair_ids2.append([chosen_pair2])
+        return head_ids1, tail_ids1, head_ids2, tail_ids2, pair_ids1, pair_ids2, label_ids
 
     for i in range(Config.positive_num):
         head_ids1.append([])
         tail_ids1.append([])
+        pair_ids1.append([])
         head_ids2.append([])
         tail_ids2.append([])
+        pair_ids2.append([])
         pairs1 = random.sample(negative_pairs1, half_sample_num)
         pairs2 = random.sample(negative_pairs2, half_sample_num)
         pos = random.randint(0, half_sample_num - 1)
@@ -327,8 +353,10 @@ def process_inter_rank(data1, data2):
         for pair in pairs1:
             head_ids1[-1].append(pair[0])
             tail_ids1[-1].append(pair[1])
+            pair_ids1[-1].append(pair)
         for pair in pairs2:
             head_ids2[-1].append(pair[0])
             tail_ids2[-1].append(pair[1])
+            pair_ids2[-1].append(pair)
 
-    return head_ids1, tail_ids1, head_ids2, tail_ids2, label_ids
+    return head_ids1, tail_ids1, head_ids2, tail_ids2, pair_ids1, pair_ids2, label_ids

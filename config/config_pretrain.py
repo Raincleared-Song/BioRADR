@@ -50,6 +50,7 @@ class ConfigPretrain(ConfigBase):
     test_step = 1
     model_path = 'checkpoint'
     model_name = 'pretrain_t0_all'
+    model_class = 'PretrainModel'
     fp16 = True
     lr_step_size = 1
     lr_gamma = 1

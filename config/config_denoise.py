@@ -58,28 +58,30 @@ class ConfigDenoise(ConfigBase):
     # test_sample_limit = 162  # #chemical * #gene
     do_validation = False
     use_gpu = True
-    gpu_device = 'cuda:0'
+    gpu_device = 'cuda:3'
     hidden_size = 256
     block_size = 64
 
     optimizer = 'adamw'
-    learning_rate = 1e-5
+    learning_rate = 4e-4  ### ATTENTION! 2e-5 for cdr, 4e-4 group default for DocuNet
     weight_decay = 0
     adam_epsilon = 1e-6
     warmup_ratio = 0.06
 
+    from_epoch = 0
     epoch_num = 30
     real_epoch_num = 15
     output_step = 1
-    save_global_step = 800
+    save_global_step = 1600
     crop_documents = False
-    crop_mention_option = 4
-    entity_marker_type = 'mt'
+    crop_mention_option = 0
+    entity_marker_type = 'm*'
     assert crop_mention_option in [0, 1, 2, 3, 4]
-    assert entity_marker_type in ['mt', 'm', 't', 't-m']
+    assert entity_marker_type in ['mt', 'm', 't', 't-m', 'm*']
     test_step = 1
     model_path = 'checkpoint'
-    model_name = 'ctd_all_celoss_p16_n15_denoise_mask4_ag1'
+    model_name = 'ctd_all_denoise_docunet_men_base_star'
+    model_class = 'DocuNetDenoise'
     fp16 = False
     lr_step_size = 1  # step_size
     lr_gamma = 1

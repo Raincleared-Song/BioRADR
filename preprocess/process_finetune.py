@@ -38,8 +38,9 @@ def process_finetune(data, mode: str):
     use_cp = 'chemprot' in Config.data_path[mode].lower()
     documents, labels, head_poses, tail_poses, label_masks, attn_masks, pairs_list, titles, types, real_list = \
         [], [], [], [], [], [], [], [str(doc[pmid_key]) for doc in data], [], []
+    positions = []
     for doc in data:
-        document, label, head_pos, tail_pos, label_mask, attn_mask, pair_ids, typ, real = process_single(doc, mode)
+        document, label, head_pos, tail_pos, label_mask, attn_mask, pair_ids, typ, real, pos = process_single(doc, mode)
         documents.append(document)
         labels.append(label)
         head_poses.append(head_pos)
@@ -49,6 +50,7 @@ def process_finetune(data, mode: str):
         pairs_list.append(pair_ids)
         types.append(typ)
         real_list.append(real)
+        positions.append(pos)
 
     sample_counts = []
     for idx in range(len(data)):
@@ -77,6 +79,7 @@ def process_finetune(data, mode: str):
         'sample_counts': sample_counts,
         'types': types,
         'real_idx': real_list,
+        'word_pos': positions,
     }
 
 
@@ -158,6 +161,8 @@ def process_single(data, mode: str, extra=None):
                         # both mention and type
                         sentences[mention['sent_id']][mention['pos'][0]] = \
                             [f'[unused{(i << 1) + 1}]', mention['type'], '*'] + tmp
+                    elif Config.entity_marker_type == 'm*':
+                        sentences[mention['sent_id']][mention['pos'][0]] = ['*'] + tmp
                     else:
                         # Config.entity_marker_type == 'm', only mention
                         sentences[mention['sent_id']][mention['pos'][0]] = [f'[unused{(i << 1) + 1}]'] + tmp
@@ -175,7 +180,9 @@ def process_single(data, mode: str, extra=None):
                         #     [f'[unused1]', mention['type'], '*', '[unused0]']
                         sentences[mention['sent_id']][mention['pos'][0]] = \
                             [mention['type'], '*', '[unused0]']
-                if Config.entity_marker_type != 't-m':
+                if Config.entity_marker_type == 'm*':
+                    sentences[mention['sent_id']][mention['pos'][1] - 1].append('*')
+                elif Config.entity_marker_type != 't-m':
                     sentences[mention['sent_id']][mention['pos'][1] - 1].append(f'[unused{(i + 1) << 1}]')
                 else:
                     # sentences[mention['sent_id']][mention['pos'][1] - 1].append(f'[unused2]')
@@ -192,8 +199,8 @@ def process_single(data, mode: str, extra=None):
     # pad each document
     if len(document) < Config.token_padding:
         document.append('[SEP]')
-        document += ['[PAD]'] * (Config.token_padding - len(document))
         attn_mask = [1] * len(document) + [0] * (Config.token_padding - len(document))
+        document += ['[PAD]'] * (Config.token_padding - len(document))
     else:
         document = document[:(Config.token_padding - 1)] + ['[SEP]']
         attn_mask = [1] * Config.token_padding
@@ -304,4 +311,4 @@ def process_single(data, mode: str, extra=None):
     # labels: sample_limit * relation_num: 97
     # for training, return at most 90 pairs; for others, return at most 1800 pairs
     return Config.tokenizer.convert_tokens_to_ids(document), \
-        labels, head_pos, tail_pos, label_mask, attn_mask, pair_ids, types, data['real_idx']
+        labels, head_pos, tail_pos, label_mask, attn_mask, pair_ids, types, data['real_idx'], positions

@@ -65,6 +65,7 @@ if __name__ == '__main__':
             m_key, m_value = inspect(task_path, f'valid{it}')
             print(f'{model_path}/{m_key}.pkl', f'{target_path}/{it}-{m_key}.pkl')
             shutil.copy(f'{model_path}/{m_key}.pkl', f'{target_path}/{it}-{m_key}.pkl')
+            os.system(f'rm -rf {model_path}/*')
         exit()
 
     # normal setting

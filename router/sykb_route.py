@@ -16,10 +16,11 @@ Version:
 from . import app
 import json
 import logging
+import threading
 from flask import make_response, request, Response
-from collection import process_two_entities, process_one_entity
+from collection import process_two_entities, process_one_entity, get_name_by_mesh_id
 from collection.search_utils import save_json, repeat_request
-from collection.ncbi_api import is_mesh_id, summary_uids
+from collection.ncbi_api import is_mesh_id, summary_uids, ncbi_key
 
 
 server_log = logging.getLogger('server')
@@ -36,6 +37,12 @@ def before():
     server_log.info(f'Before {request.method} request by {request.remote_addr} url: {request.url}')
 
 
+sykb_search_semaphore = threading.Semaphore(3)
+sykb_docinfo_semaphore = threading.Semaphore(10)
+sykb_entinfo_semaphore = threading.Semaphore(10)
+sykb_search_ent_semaphore = threading.Semaphore(10)
+
+
 @app.route("/sykb/api/search", methods=["GET"])
 def sykb_search():
     head = request.args.get('head', '', type=str).strip()
@@ -44,7 +51,13 @@ def sykb_search():
     page_size = request.args.get('pageSize', 10, type=int)
     if head == '' or tail == '':
         return make_response({"success": False, "data": {"error_msg": "head and tail should not be empty"}}, 400)
-    ret = process_two_entities(head, tail)
+    sykb_search_semaphore.acquire()
+    try:
+        ret = process_two_entities(head, tail)
+    except RuntimeError:
+        ret = 'model inference runtime error'
+    finally:
+        sykb_search_semaphore.release()
     if isinstance(ret, str):
         return make_response({"success": False, "data": {"error_msg": ret}}, 400)
     assert isinstance(ret, list) and len(ret) == 1
@@ -80,8 +93,12 @@ def sykb_docinfo():
         return make_response({"success": False, "data": {"error_msg": "pmid should not be empty"}}, 400)
     url = f'https://www.ncbi.nlm.nih.gov/research/pubtator-api/publications/export/biocjson?' \
           f'pmids={pmid}&concepts=chemical,disease' \
-          f'&api_key=326042ba82c2800f8fcf63717f14d8063708'
-    cont = repeat_request(url)
+          f'&api_key={ncbi_key}'
+    sykb_docinfo_semaphore.acquire()
+    try:
+        cont = repeat_request(url)
+    finally:
+        sykb_docinfo_semaphore.release()
     data = None
     for js in cont.split('\n'):
         if len(js.strip()) == 0:
@@ -119,7 +136,13 @@ def sykb_entinfo():
         return make_response({"success": False, "data": {"error_msg": "meshid format illegal"}}, 400)
 
     mesh_uid = str(ord(mesh_id[0])) + mesh_id[1:]
-    res = summary_uids([mesh_uid])
+    sykb_entinfo_semaphore.acquire()
+    try:
+        res = summary_uids([mesh_uid])
+    except KeyError:
+        res = {mesh_uid: ('', [get_name_by_mesh_id(mesh_id)], [], mesh_id)}
+    finally:
+        sykb_entinfo_semaphore.release()
     if mesh_uid not in res:
         return make_response({"success": False, "data": {"error_msg": "entity summary error"}}, 400)
     scopenote, meshterms, idxlinks, _ = res[mesh_uid]
@@ -143,14 +166,17 @@ def sykb_search_ent():
     page_size = request.args.get('pageSize', 20, type=int)
     if key == '':
         return make_response({"success": False, "data": {"error_msg": "key should not be empty"}}, 400)
-    response = process_one_entity(key, offset=(page_index-1)*page_size, count=page_size)
+    sykb_search_ent_semaphore.acquire()
+    try:
+        response = process_one_entity(key, offset=(page_index-1)*page_size, count=page_size)
+    finally:
+        sykb_search_ent_semaphore.release()
     if isinstance(response, str):
         return make_response({"success": False, "data": {"error_msg": response}}, 400)
     assert isinstance(response, dict)
     response.update({
         'current': page_index,
         'count': len(response['results']),
-        'total_pages': 1,
         'page_size': page_size,
         'searchType': 'text',
         'error_msg': '',

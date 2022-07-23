@@ -25,7 +25,7 @@ class DocuNetDenoise(nn.Module):
         super(DocuNetDenoise, self).__init__()
 
         emb_size, hidden_size, unet_in_dim, unet_out_dim, max_height, num_labels, channel_type, down_dim = \
-            768, Config.bert_hidden, 3, 256, 35, 1, 'context-based', 256
+            768, Config.bert_hidden, 3, 256, 36, 1, 'context-based', 256
 
         self.bert_model = BertModel.from_pretrained(Config.bert_path)
         self.loss_fnt = loss_map[Config.loss_func]()

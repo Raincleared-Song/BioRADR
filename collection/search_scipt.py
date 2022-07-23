@@ -1,9 +1,10 @@
+import os
 import re
 import random
 from tqdm import tqdm
-from .ncbi_api import baidu_translate, fetch_uids, is_mesh_id, pubtator_to_docred, search_get_pubmed
-from .search_db import init_db, get_documents_by_pmids
-from .search_utils import save_json, load_json, adaptive_load, fix_ner_by_search
+from ncbi_api import baidu_translate, fetch_uids, is_mesh_id, pubtator_to_docred, search_get_pubmed
+from search_db import init_db, get_documents_by_pmids
+from search_utils import save_json, load_json, adaptive_load, fix_ner_by_search
 
 
 def gen_pair_to_docs():
@@ -493,22 +494,22 @@ def temp_func():
     # ctd_finetune_cd_dg_combined 44 + cg -> 9 23 2152
     # ctd_finetune_cd_dg_combined 52 + cg -> 18 37 2152
 
-    fin = open('test_paper.txt', 'r', encoding='utf-8')
+    fin = open('test_paper_new.txt', 'r', encoding='utf-8')
     lines = [line.strip() for line in fin.readlines()]
     cur_title = ''
     results = []
     for line in lines:
-        if len(line) > 2 and line[0].isdigit() and line[1] == '.':
+        if len(line) > 3 and line[0].isdigit() and (line[1] == '.' or line[2] == '.'):
             if cur_title != '':
                 print(cur_title, end=' ')
                 assert len(results) == 3
                 for idx in range(6):
-                    print(round((results[0][idx] + results[1][idx] + results[2][idx]) * 100 / 3, 2), end=' & ')
+                    print(f'{round((results[0][idx] + results[1][idx] + results[2][idx]) * 100 / 3, 2):.2f}', end=' & ')
                 print()
                 results = []
             cur_title = line.split(' ')[1]
-        if 'rank46' in line:
-            accuracies = re.findall(r'0\.[0-9]+', line)
+        if 'rank46' in line or 'rank23' in line:
+            accuracies = re.findall(r'0\.\d+', line)
             assert len(accuracies) == 6
             cur_res = [float(acc) for acc in accuracies]
             cur_res.reverse()
@@ -517,7 +518,7 @@ def temp_func():
         print(cur_title, end=' ')
         assert len(results) == 3
         for idx in range(6):
-            print(round((results[0][idx] + results[1][idx] + results[2][idx]) * 100 / 3, 2), end=' & ')
+            print(f'{round((results[0][idx] + results[1][idx] + results[2][idx]) * 100 / 3, 2):.2f}', end=' & ')
         print()
     fin.close()
     exit()
@@ -839,7 +840,65 @@ def gen_segment_annotation_files(pair, seg_idx):
     err_log.close()
 
 
+def combine_second_round():
+    first_round = 'manual/manual_ans1'
+    second_round_ori = 'manual/manual_ans2_ori'
+    second_round = 'manual/manual_ans2'
+    final_round = 'manual/manual_new'
+    first_round_f = sorted(os.listdir(first_round))
+    second_round_ori_f = sorted(os.listdir(second_round_ori))
+    second_round_f = sorted(os.listdir(second_round))
+    final_round_f = sorted(os.listdir(final_round))
+    print(len(first_round_f), len(second_round_f), len(second_round_ori_f), len(final_round_f))
+    assert first_round_f == second_round_f == second_round_ori_f
+    for final in final_round_f:
+        assert final in final_round_f
+    for first_n, second_n, second_ori_n in zip(first_round_f, second_round_f, second_round_ori_f):
+        with open(os.path.join(first_round, first_n)) as fin:
+            first_l = [line.strip().split(',') for line in fin.readlines() if len(line.strip()) > 0]
+            assert all(len(item) == 3 for item in first_l)
+        with open(os.path.join(second_round, second_n)) as fin:
+            second_l = [line.strip().split(',') for line in fin.readlines() if len(line.strip()) > 0]
+            assert all(len(item) == 3 for item in second_l)
+        with open(os.path.join(second_round_ori, second_ori_n)) as fin:
+            second_ori_l = [line.strip().split(',') for line in fin.readlines() if len(line.strip()) > 0]
+            for item in second_l:
+                if len(item) != 3:
+                    print(second_n, item)
+            assert all(len(item) == 3 for item in second_ori_l)
+        assert len(first_l) == len(second_l) == len(second_ori_l)
+        if first_n in final_round_f:
+            # 已经合并好
+            with open(os.path.join(final_round, first_n)) as fin:
+                final_l = [line.strip().split(',') for line in fin.readlines() if len(line.strip()) > 0]
+                assert all(len(item) == 3 and float(item[2]) in [1, 2, 3, 1.5, 2.5] for item in final_l)
+                assert len(final_l) == len(first_l)
+            for first, second, second_ori, final in zip(first_l, second_l, second_ori_l, final_l):
+                # 如果第二轮结果有修改
+                assert first[0] == second[0] == second_ori[0] == final[0]
+            continue
+        fout = open(os.path.join(final_round, first_n), 'w')
+        for first, second, second_ori in zip(first_l, second_l, second_ori_l):
+            assert first[0] == second[0] == second_ori[0]
+            first_tag, first_rank = int(first[1]), int(first[2])
+            second_tag, second_rank = int(second[1]), int(second[2])
+            second_ori_tag, second_ori_rank = int(second_ori[1]), int(second_ori[2])
+            # 如果第二轮结果有修改，取改正结果
+            if (second_tag, second_rank) != (second_ori_tag, second_ori_rank):
+                fout.write(f'{first[0]},{second_tag},{second_rank}\n')
+            # 如果一二轮标签不一致，取二轮结果
+            elif first_tag != second_tag:
+                fout.write(f'{first[0]},{second_tag},{second_rank}\n')
+            # 取平均
+            else:
+                avg_rank = round((first_rank + second_rank) / 2, 1)
+                assert avg_rank in [1, 2, 3, 1.5, 2.5]
+                fout.write(f'{first[0]},{second_tag},{avg_rank}\n')
+        fout.close()
+
+
 if __name__ == '__main__':
+    # combine_second_round()
     # get_main_articles()
     # get_article_segments()
     # gen_segment_annotation_files()

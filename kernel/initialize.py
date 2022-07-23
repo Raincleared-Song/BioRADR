@@ -151,8 +151,8 @@ def init_models(args):
             model.parameters(), lr=config.learning_rate, weight_decay=config.weight_decay, eps=config.adam_epsilon)
     else:
         print('Using DocuNet optimizer parameter groups ......')
-        extract_layer = ["extractor", "bilinear"]
-        bert_layer = ['bert_model']
+        extract_layer = ["extractor", "bilinear", "linear_out"]
+        bert_layer = ["bert", "bert_model"]
         optimizer_grouped_parameters = [
             {"params": [p for n, p in model.named_parameters() if any(nd in n for nd in bert_layer)], "lr": 3e-5},
             {"params": [p for n, p in model.named_parameters() if any(nd in n for nd in extract_layer)], "lr": 1e-4},

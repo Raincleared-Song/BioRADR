@@ -1,32 +1,54 @@
-# BioDSDocRE
+# BioDRE
 
-Source code for BioDSDocRE (under development)
+Source code for paper _BioDRE: A Powerful Helper When We Want Relations in Biomedical Document Retrieval_.
 
-### Training denoise model
+### Environment
+The anaconda environment is provided in `conda_env.yaml`.
 
-Parameter checkpoint_pkl_file is needed if you want to resume training from a checkpoint.
+### Data Availability
+Download data from [link](https://drive.google.com/drive/folders/1DQHSG2tdHLQt6uXfhWXfqRD_wXE14uoq?usp=sharing) and put those files under the project directory.
 
-```shell
-python3 main.py -t denoise -m train [-c checkpoint_pkl_file]
+### Performance in DocRE
+
+#### Pre-training on CTDRED
+You should first modify `config/config_base.py` and `config/config_finetune.py` according to `config_bak/docre_pretrain.py`, and execute:
+```bash
+python3 main.py -t finetune -m train
+```
+Then adopt checkpoint epoch-0 and abandon others.
+
+#### Fine-tuning on BC5CDR
+To reproduce the results, you should first change `config/config_base.py` and `config/config_finetune.py` according to `config_bak/docre_docunet.py` (DocuNet+Tuned) and `config_bak/docre_biodre.py` (BioDRE). Then, modify the line 51 of `main.py` to `is_cdr = True` for automatic 5-time replication.
+
+Then, for training:
+```bash
+python3 main.py -t finetune -m train -c {pre-trained checkpoint path, omissible}
 ```
 
-### Generate RD score file
-
-```shell
-python3 main.py -t denoise -m test -c pkl_file_used_to_rank -rf file_to_rank
+For testing, modify the line 51 of `main.py` to `is_cdr = False`, and then:
+```bash
+python3 batch_test_cdr.py -t {model name under the dir 'checkpoint'}
 ```
 
-### Pretrain
-
-```shell
-python3 main.py -t pretrain -m train [-c checkpoint_pkl_file]
+### Performance in RAR
+#### Training on CTDRED
+You should first modify `config/config_base.py` and `config/config_denoise.py` according to `config_bak/rar_docunet.py` (DocuNet+Tuned) and `config_bak/rar_biodre.py` (BioDRE).
+```bash
+python3 main.py -t denoise -m train
 ```
-
-### Finetune
-
-If pretrain_model_path is not specified, 'dmis-lab/biobert-base-cased-v1.1' will be used by default.
-
-```shell
-python3 main.py -t finetune -m train [-c checkpoint_pkl_file] [-pb pretrain_model_path]
+#### Testing on DocRARD
+After training, do validation on group 0,1,25,26 to choose the best model (k=-1 for NDCG@All):
+```bash
+python3 test_ndcg.py -d manual/rank_files/0_pmc_segments_sample.json,\
+manual/rank_files/1_pmc_segments_sample.json,manual/rank_files/25_pmc_segments_sample.json,manual/rank_files/26_pmc_segments_sample.json \
+-a manual/manual_new/0_seg_ans.txt,manual/manual_new/1_seg_ans.txt,manual/manual_new/25_seg_ans.txt,manual/manual_new/26_seg_ans.txt \
+-p {parent dir of checkpoints to be tested} \
+-rp CTDRED/temp_range -mn {model name under the dir 'checkpoint'} -n {NDCG@k: -1,50,20,10,5,1}
 ```
-
+Then, for testing:
+```bash
+python3 test_ndcg.py -d manual/rank_files -a manual/manual_new \
+-p {the chosen checkpoint path} \
+-rp CTDRED/temp_range -mn {model name under the dir 'checkpoint'} -i 0,1,25,26 -n {NDCG@k: -1,50,20,10,5,1}
+```
+For results on Inside-CTD groups and Outside-CTD groups, change the option `-i 0,1,25,26` to `-i 0,1,25-49` and `0-24,25,26` respectively.

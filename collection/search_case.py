@@ -7,6 +7,7 @@ import logging
 import traceback
 import numpy as np
 from torch.autograd import Variable
+from xml.sax import SAXParseException
 from .search_utils import load_json, repeat_input, setup_logger, is_mesh_id
 from .ncbi_api import search_get_pubmed, pubtator_to_docred, spell_term, summary_uids
 from .search_initialize import init_args, init_model, init_data
@@ -68,7 +69,10 @@ def link_entity(entity: str, spell=True):
     global GLOBAL
     logger = GLOBAL['logger']
     if spell:
-        entity = spell_term(entity)
+        try:
+            entity = spell_term(entity)
+        except SAXParseException:
+            pass
     nlp = GLOBAL['linker']
     doc = nlp(entity)
     if len(doc.ents) != 1:
@@ -207,7 +211,7 @@ def process_one_entity(key: str, offset=0, count=20):
                 candidate_cnt[cid2] += 1
         is_head = True
     elif key_cid in disease_to_head_doc:
-        for cid1, _ in chemical_to_tail_doc[key_cid]:
+        for cid1, _ in disease_to_head_doc[key_cid]:
             # 只取 MeSH 的实体
             if is_mesh_id(cid1):
                 candidate_cnt.setdefault(cid1, 0)
@@ -219,14 +223,21 @@ def process_one_entity(key: str, offset=0, count=20):
     candidate_cnt = sorted(list(candidate_cnt.items()), key=lambda x: x[1], reverse=True)
     candidate_cids = [cid for cid, _ in candidate_cnt]
     candidates = [(str(ord(cid[0])) + cid[1:]) for cid in candidate_cids]
+    if offset >= len(candidates):
+        return 'page index exceeded'
+    page_num = (len(candidates) + count - 1) // count
     results = []
     batch_size = 20
     start, end = 0, batch_size
     candidates = candidates[offset:(offset+count)]
+    candidate_cids = candidate_cids[offset:(offset+count)]
     while start < len(candidates):
         cur_candidates = candidates[start:end]
         cur_candidate_cids = candidate_cids[start:end]
-        data = summary_uids(cur_candidates)
+        try:
+            data = summary_uids(cur_candidates)
+        except KeyError:
+            data = {}
         for uid, cid in zip(cur_candidates, cur_candidate_cids):
             if uid in data:
                 scopenote, meshterms, idxlinks, _ = data[uid]
@@ -250,6 +261,7 @@ def process_one_entity(key: str, offset=0, count=20):
     return {
         'is_head': is_head,
         'results': results,
+        'total_pages': page_num,
     }
 
 

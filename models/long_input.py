@@ -75,4 +75,4 @@ def process_long_input(model, input_ids, attn_mask, config, ret_attn=False):
             idx += n_s
         sequence_output = torch.stack(new_output, dim=0)
         attention = torch.stack(new_attention, dim=0)
-    return sequence_output, attention if ret_attn else sequence_output
+    return (sequence_output, attention) if ret_attn else sequence_output

@@ -1,6 +1,7 @@
 .idea/
 checkpoint/
 __pycache__/
+.pytest_cache/
 CTDRED/
 data/
 DocRED/
@@ -28,3 +29,4 @@ problem*.txt
 problem*.log
 test_cps_score.py
 *.zip
+ncbi_key.txt

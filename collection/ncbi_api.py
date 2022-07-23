@@ -1,3 +1,4 @@
+import os
 import sys
 import csv
 import time
@@ -12,6 +13,18 @@ import jsonlines
 from typing import Union, List, Tuple
 from timeit import default_timer as timer
 from .search_utils import repeat_request, load_json, save_json, is_mesh_id, time_to_str
+
+
+def init_ncbi_key():
+    if os.path.exists('ncbi_key.txt'):
+        with open('ncbi_key.txt') as fin:
+            key = fin.readline().strip()
+        return key
+    print('Warning: ncbi_key not initialized!', file=sys.stderr)
+    return ''
+
+
+ncbi_key = init_ncbi_key()
 
 
 class SpellHandler(xml.sax.handler.ContentHandler):
@@ -34,7 +47,7 @@ class SpellHandler(xml.sax.handler.ContentHandler):
 def search_term(term: str, db: str = 'mesh', ret_max: int = 100):
     """List of uids"""
     url = f'https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi?db={db}&term={term}' \
-          f'&retmode=json&retmax={ret_max}&api_key=326042ba82c2800f8fcf63717f14d8063708'
+          f'&retmode=json&retmax={ret_max}&api_key={ncbi_key}'
     url = url.strip().replace(' ', '+')
     response = repeat_request(url)
     logger = logging.getLogger('server')
@@ -53,7 +66,7 @@ def search_term(term: str, db: str = 'mesh', ret_max: int = 100):
 def fetch_uids(uids: list, db: str = 'mesh'):
     uid_str = ','.join(uids)
     url = f'https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db={db}&id={uid_str}&retmode=json' \
-          f'&api_key=326042ba82c2800f8fcf63717f14d8063708'
+          f'&api_key={ncbi_key}'
     cont = repeat_request(url)
     return cont
 
@@ -63,7 +76,7 @@ def summary_uids(uids: list, db: str = 'mesh'):
     uid_str = ','.join(uids)
     """uid -> tuple[description, entry_terms (synonyms), link_entities, MeSH_ID]"""
     url = f'https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esummary.fcgi?db={db}&id={uid_str}&retmode=json' \
-          f'&api_key=326042ba82c2800f8fcf63717f14d8063708'
+          f'&api_key={ncbi_key}'
     cont = json.loads(repeat_request(url))['result']
     if len(cont['uids']) != len(uids):
         logger.error(f'Summary Failed: {uid_str} result: {cont}')
@@ -86,7 +99,7 @@ def summary_uids(uids: list, db: str = 'mesh'):
 def spell_term(term: str, db: str = 'mesh'):
     """拼写纠错，编辑距离较短时效果较好"""
     url = f'https://eutils.ncbi.nlm.nih.gov/entrez/eutils/espell.fcgi?db={db}&term={term}' \
-          f'&api_key=326042ba82c2800f8fcf63717f14d8063708'
+          f'&api_key={ncbi_key}'
     url = url.strip().replace(' ', '+')
     cont = repeat_request(url)
     handler = SpellHandler(term)
@@ -125,7 +138,7 @@ def get_pmids(pmids: list, concepts: list = None, pmcid: bool = False):
         pmid_str = ','.join(pmids[start:end])
         url = f'https://www.ncbi.nlm.nih.gov/research/pubtator-api/publications/export/biocjson?' \
               f'{"pmcids" if pmcid else "pmids"}={pmid_str}&concepts={concept_str}' \
-              f'&api_key=326042ba82c2800f8fcf63717f14d8063708'
+              f'&api_key={ncbi_key}'
         cont = repeat_request(url)
         for js in cont.split('\n'):
             if len(js.strip()) == 0:

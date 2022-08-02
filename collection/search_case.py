@@ -6,10 +6,11 @@ import spacy
 import logging
 import traceback
 import numpy as np
+from deprecated import deprecated
 from torch.autograd import Variable
 from xml.sax import SAXParseException
 from .search_utils import load_json, repeat_input, setup_logger, is_mesh_id
-from .ncbi_api import search_get_pubmed, pubtator_to_docred, spell_term, summary_uids
+from .ncbi_api import search_get_pubmed, pubtator_to_docred, spell_term, summary_uids, search_term
 from .search_initialize import init_args, init_model, init_data
 from scispacy.linking import EntityLinker
 # from scispacy.abbreviation import AbbreviationDetector
@@ -65,6 +66,7 @@ def init_all():
     GLOBAL['disease_to_head_doc'] = load_json('CTDRED/disease_to_head_doc.json')
 
 
+@deprecated('this function is depreciated and does not work well')
 def link_entity(entity: str, spell=True):
     global GLOBAL
     logger = GLOBAL['logger']
@@ -82,6 +84,22 @@ def link_entity(entity: str, spell=True):
     if len(kbs) == 0:
         return '', 'link failed'
     cid = kbs[0][0]
+    return entity, cid
+
+
+def link_entity_by_api(entity: str, spell=True):
+    if spell:
+        try:
+            entity = spell_term(entity)
+        except SAXParseException:
+            pass
+    uids = search_term(entity)
+    if len(uids) == 0:
+        return '', '0 entities found'
+    target_uid = uids[0]
+    if len(target_uid) < 2:
+        return '', 'invalid uid returned'
+    cid = chr(int(target_uid[:2])) + target_uid[2:]
     return entity, cid
 
 
@@ -196,7 +214,7 @@ def process_one_entity(key: str, offset=0, count=20):
     init_spacy_gpu(GLOBAL['args'])
     if key == '':
         return 'empty key'
-    key, key_cid = link_entity(key)
+    key, key_cid = link_entity_by_api(key)
     if key == '':
         return 'key link failure'
     assert is_mesh_id(key_cid)
@@ -271,10 +289,10 @@ def process_two_entities(entity1: str, entity2: str):
     logger = GLOBAL['logger']
     na_score = GLOBAL['na_score']
     assert entity1 != '' and entity2 != ''
-    entity1, cid1 = link_entity(entity1)
+    entity1, cid1 = link_entity_by_api(entity1)
     if entity1 == '':
         return 'head entity link failure'
-    entity2, cid2 = link_entity(entity2)
+    entity2, cid2 = link_entity_by_api(entity2)
     if entity2 == '':
         return 'tail entity link failure'
     logger.info(f'entity1: [{cid1}] entity2: [{cid2}]')

@@ -1,6 +1,6 @@
-# BioDRE
+# BioRADR
 
-Source code for paper _BioDRE: A Powerful Helper When We Want Relations in Biomedical Document Retrieval_.
+Source code for paper _BioRADR: Biomedical Relation-Aware Document Ranking_.
 
 ### Environment
 The anaconda environment is provided in `conda_env.yaml`.
@@ -18,7 +18,7 @@ python3 main.py -t finetune -m train
 Then adopt checkpoint epoch-0 and abandon others.
 
 #### Fine-Tuning on BC5CDR
-To reproduce the results, you should first change `config/config_base.py` and `config/config_finetune.py` according to `config_bak/docre_docunet.py` (DocuNet+Tuned) and `config_bak/docre_biodre.py` (BioDRE). Then, modify the line 51 of `main.py` to `is_cdr = True` for automatic 5-time replication.
+To reproduce the results, you should first change `config/config_base.py` and `config/config_finetune.py` according to `config_bak/docre_docunet.py` (DocuNet+Tuned) and `config_bak/docre_biodre.py` (BioRADR). Then, modify the line 51 of `main.py` to `is_cdr = True` for automatic 5-time replication.
 
 Then, for training:
 ```bash
@@ -32,7 +32,7 @@ python3 batch_test_cdr.py -t {model name under the dir 'checkpoint'}
 
 ### Performance in BioRADR
 #### Training on CTDRED
-You should first modify `config/config_base.py` and `config/config_denoise.py` according to `config_bak/rar_docunet.py` (DocuNet+Tuned) and `config_bak/rar_biodre.py` (BioDRE).
+You should first modify `config/config_base.py` and `config/config_denoise.py` according to `config_bak/rar_docunet.py` (DocuNet+Tuned) and `config_bak/rar_biodre.py` (BioRADR).
 ```bash
 python3 main.py -t denoise -m train
 ```

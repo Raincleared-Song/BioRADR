@@ -92,6 +92,7 @@ def main_bm25():
     heads + tails: 1 50.85; 5 49.34; 10 49.94; 20 52.07; 50 62.53; -1 79.9
     heads + tails (set): 1 44.27; 5 45.57; 10 46.75; 20 50.8; 50 61.51; -1 79.26
     """
+    print('testing BM25 ......')
     ignores = [0, 1, 25, 26]
     ndcg = {1: [], 5: [], 10: [], 20: [], 50: [], -1: []}
     for idx in trange(50, desc='bm25'):
@@ -115,6 +116,7 @@ def main_pmc():
     search engine baseline for BioRADR
     PMC: 1 50.3, 5 49.06, 10 49.97, 20 52.52, 50 61.91, -1 80.1
     """
+    print('testing PMC ......')
     ignores, cache = [0, 1, 25, 26], []
     for idx in range(50):
         if idx in ignores:
@@ -167,5 +169,5 @@ def main_pmc():
 
 
 if __name__ == '__main__':
-    # main_bm25()
+    main_bm25()
     main_pmc()

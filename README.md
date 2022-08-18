@@ -51,4 +51,7 @@ python3 test_ndcg.py -d manual/rank_files -a manual/manual_new \
 -p {the chosen checkpoint path} \
 -rp CTDRED/temp_range -mn {model name under the dir 'checkpoint'} -i 0,1,25,26 -n {NDCG@k: -1,50,20,10,5,1}
 ```
-For results on Inside-CTD groups and Outside-CTD groups, change the option `-i 0,1,25,26` to `-i 0,1,25-49` and `0-24,25,26` respectively.
+For results on Inside-CTD groups and Outside-CTD groups, change the option `-i 0,1,25,26` to `-i 0,1,25-49` and `0-24,25,26` respectively. To obtain results of `BM25` and `PMC`, run the following script:
+```bash
+python3 test_ranking.py
+```

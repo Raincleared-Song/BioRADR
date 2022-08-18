@@ -24,11 +24,11 @@ def repeat_input(info: str, restrict=None, int_range=None):
     return cont
 
 
-def repeat_request(url: str, max_time: int = 10):
+def repeat_request(url: str, max_time: int = 10, time_out: int = 10):
     logger = logging.getLogger('server')
     for _ in range(max_time):
         try:
-            content = requests.get(url, timeout=10).text
+            content = requests.get(url, timeout=time_out).text
             return content
         except (ReadTimeout, ConnectionError):
             logger.warning('repeat_request: timeout!')

@@ -44,10 +44,10 @@ class SpellHandler(xml.sax.handler.ContentHandler):
             self.result = content
 
 
-def search_term(term: str, db: str = 'mesh', ret_max: int = 100, sort: str = 'relevance'):
+def search_term(term: str, db: str = 'mesh', ret_start: int = 0, ret_max: int = 100, sort: str = 'relevance'):
     """List of uids"""
     url = f'https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi?db={db}&term={term}' \
-          f'&retmode=json&retmax={ret_max}&sort={sort}&api_key={ncbi_key}'
+          f'&retmode=json&retstart={ret_start}&retmax={ret_max}&sort={sort}&api_key={ncbi_key}'
     url = url.strip().replace(' ', '+')
     response = repeat_request(url)
     logger = logging.getLogger('server')

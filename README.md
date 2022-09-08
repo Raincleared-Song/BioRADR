@@ -6,7 +6,7 @@ Source code for paper _BioRADR: Biomedical Relation-Aware Document Ranking_.
 The anaconda environment is provided in `conda_env.yaml`.
 
 ### Data Availability
-Download data from [link](https://drive.google.com/drive/folders/1DQHSG2tdHLQt6uXfhWXfqRD_wXE14uoq?usp=sharing) and put those files under the project directory.
+Download data from [link](https://drive.google.com/drive/folders/1DQHSG2tdHLQt6uXfhWXfqRD_wXE14uoq?usp=sharing) and put those files under the project directory. All data are processed into the same format as [DocRED](https://github.com/thunlp/DocRED).
 
 ### Performance in Document-Level RE
 

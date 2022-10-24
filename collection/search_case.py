@@ -278,6 +278,7 @@ def process_one_entity(key: str, offset=0, count=20):
         start, end = end, end + batch_size
     return {
         'is_head': is_head,
+        'linked_cid': key_cid,
         'results': results,
         'total_pages': page_num,
     }

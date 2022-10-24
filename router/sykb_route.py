@@ -79,6 +79,8 @@ def sykb_search():
         'searchType': 'text',
         'head': head,
         'tail': tail,
+        'linked_cid1': cid1,
+        'linked_cid2': cid2,
         'error_msg': '',
     }
     save_json(request.args.to_dict(), 'cases/req_search.json')

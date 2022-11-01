@@ -1,4 +1,5 @@
 .idea/
+.DS_Store
 checkpoint/
 __pycache__/
 .pytest_cache/

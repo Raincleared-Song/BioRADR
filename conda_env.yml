@@ -81,9 +81,11 @@ dependencies:
     - cupy-cuda101==9.5.0
     - cycler==0.10.0
     - cymem==2.0.6
+    - datasets==2.1.0
     - docker-pycreds==0.4.0
     - en-core-sci-lg==0.4.0
     - en-core-sci-scibert==0.4.0
+    - faiss-gpu==1.7.2
     - fastrlock==0.8
     - filelock==3.0.12
     - gitdb==4.0.7

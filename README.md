@@ -18,7 +18,7 @@ python3 main.py -t finetune -m train
 Then adopt checkpoint epoch-0 and abandon others.
 
 #### Fine-Tuning on BC5CDR
-To reproduce the results, you should first change `config/config_base.py` and `config/config_finetune.py` according to `config_bak/docre_docunet.py` (DocuNet+Tuned) and `config_bak/docre_biodre.py` (BioRADR). Then, modify the line 51 of `main.py` to `is_cdr = True` for automatic 5-time replication.
+To reproduce the results, you should first change `config/config_base.py` and `config/config_finetune.py` according to `config_bak/docre_docunet.py` (DocuNet+Tuned) and `config_bak/docre_biodre.py` (BioRADR) respectively. Then, modify the line 51 of `main.py` to `is_cdr = True` for automatic 5-time replication.
 
 Then, for training:
 ```bash
@@ -32,7 +32,7 @@ python3 batch_test_cdr.py -t {model name under the dir 'checkpoint'}
 
 ### Performance in BioRADR
 #### Training on CTDRED
-You should first modify `config/config_base.py` and `config/config_denoise.py` according to `config_bak/rar_docunet.py` (DocuNet+Tuned) and `config_bak/rar_biodre.py` (BioRADR).
+You should first modify `config/config_base.py` and `config/config_denoise.py` according to `config_bak/rar_docunet.py` (DocuNet+Tuned) and `config_bak/rar_biodre.py` (BioRADR) respectively.
 ```bash
 python3 main.py -t denoise -m train
 ```
@@ -51,7 +51,19 @@ python3 test_ndcg.py -d manual/rank_files -a manual/manual_new \
 -p {the chosen checkpoint path} \
 -rp CTDRED/temp_range -mn {model name under the dir 'checkpoint'} -i 0,1,25,26 -n {NDCG@k: -1,50,20,10,5,1}
 ```
-For results on Inside-CTD groups and Outside-CTD groups, change the option `-i 0,1,25,26` to `-i 0,1,25-49` and `0-24,25,26` respectively. To obtain results of `BM25` and `PMC`, run the following script:
+For results on Inside-CTD groups and Outside-CTD groups, change the option `-i 0,1,25,26` to `-i 0,1,25-49` and `0-24,25,26` respectively.
+#### Other Baselines for BioRADR
+To obtain results of `BM25` and `PMC`, run the following script:
 ```bash
 python3 test_ranking.py
+```
+To obtain the results of `ColBERT`, run the following commands (To implement ColBERT re-ranking, we modify some of its [codes](https://github.com/stanford-futuredata/ColBERT)):
+```bash
+git clone git@github.com:stanford-futuredata/ColBERT.git
+cd ColBERT
+cp ../test_colbert/eval_colbert.py ./
+cp ../test_colbert/settings.py ./colbert/infra/config/
+cp ../test_colbert/index_storage.py ./colbert/search/
+cp ../test_colbert/collection_indexer.py ./colbert/indexing/
+python eval_colbert.py --gpu {a single GPU rank}
 ```

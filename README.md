@@ -57,13 +57,19 @@ To obtain results of `BM25` and `PMC`, run the following script:
 ```bash
 python3 test_ranking.py
 ```
-To obtain the results of `ColBERT`, run the following commands (To implement ColBERT re-ranking, we modify some of its [codes](https://github.com/stanford-futuredata/ColBERT)):
+To obtain the results of `ColBERT`, run the following commands. To implement ColBERT re-ranking, we modify some of its [codes](https://github.com/stanford-futuredata/ColBERT). For lack of biomedical IR training data, we directly adopt the model checkpoint ([link](https://downloads.cs.stanford.edu/nlp/data/colbert/colbertv2/colbertv2.0.tar.gz)) pre-trained on MSMARCO.
 ```bash
 git clone git@github.com:stanford-futuredata/ColBERT.git
 cd ColBERT
+mkdir -p bioradr/tsv
+mkdir bioradr/configs
+mkdir bioradr/results
+wget https://downloads.cs.stanford.edu/nlp/data/colbert/colbertv2/colbertv2.0.tar.gz
+tar -zxvf colbertv2.0.tar.gz
+rm colbertv2.0.tar.gz
 cp ../test_colbert/eval_colbert.py ./
 cp ../test_colbert/settings.py ./colbert/infra/config/
 cp ../test_colbert/index_storage.py ./colbert/search/
 cp ../test_colbert/collection_indexer.py ./colbert/indexing/
-python eval_colbert.py --gpu {a single GPU rank}
+python3 eval_colbert.py --gpu {a single GPU rank}
 ```

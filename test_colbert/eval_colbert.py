@@ -34,7 +34,7 @@ def save_tsv(obj: list, path: str):
 
 
 en_punc = '.,<>?/\\[]{};:\'\"|=+-_()*&^%$#@!~`\n\t '
-mesh_id_to_name = load_json('../project-1/CTDRED/mesh_id_to_name.json')
+mesh_id_to_name = load_json('../CTDRED/mesh_id_to_name.json')
 label_to_rank = {
     (1, 3): 5, (1, 2): 4, (1, 1): 3,
     (0, 1): 2, (0, 2): 1, (0, 3): 0,
@@ -55,7 +55,7 @@ def get_query_corpus_label(index: int):
     """
     5 - abs from PubMed, 45 - seg from PMC
     """
-    path_base, ans_base = '../project-1/manual/manual_files', '../project-1/manual/manual_new'
+    path_base, ans_base = '../manual/manual_files', '../manual/manual_new'
     is_pmc = os.path.exists(f'{path_base}/{index}_seg.txt')
     if is_pmc:
         file_name, ans_name = f'{index}_seg.txt', f'{index}_seg_ans.txt'
@@ -194,7 +194,7 @@ def main():
         for n in ndcg.keys():
             score = ndcg_score(y_true=[labels], y_score=[doc_scores], k=n, ignore_ties=False)
             ndcg[n].append(score)
-    save_json(ndcg, 'result_ndcg.json')
+    save_json(ndcg, 'bioradr/result_ndcg.json')
     for key, val in ndcg.items():
         n_key = str(key) if key != -1 else 'All'
         assert len(val) == 46

@@ -87,7 +87,8 @@ python train_rerank.py  \
     --num_train_epochs 10  \
     --loss_fn bce  \
     --logging_dir scibert_trec_log  \
-    --dataloader_num_workers 1
+    --dataloader_num_workers 1 \
+    --seed 100
 # validation and test
 python eval_openmatch.py -t scibert_trec
 ```

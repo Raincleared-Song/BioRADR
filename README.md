@@ -57,38 +57,4 @@ To obtain results of `BM25` and `PMC`, run the following script:
 ```bash
 python3 test_ranking.py
 ```
-To obtain the results of `BERT Re-Ranker`, run the following commands.
-```bash
-# downloaded from the link mentioned in 'Data Availability'
-cd OpenMatch
-# generate training set
-python build_train.py \
-    --tokenizer_name allenai/scibert_scivocab_cased \
-    --sample_file ../trec_pm/train_triplets_open.jsonl \
-    --queries ../trec_pm/queries.tsv \
-    --collection ../trec_pm/collection_open.tsv \
-    --save_to ../trec_pm/ \
-    --doc_template "<title> <text> [SEP]" \
-    --query_template "<text>" \
-    --doc_max_len 478 \
-    --query_max_len 32
-# train BERT Re-Ranker
-export CUDA_VISIBLE_DEVICES=0  # gpu index can be changed
-python train_rerank.py  \
-    --output_dir scibert_trec  \
-    --model_name_or_path allenai/scibert_scivocab_cased  \
-    --do_train  \
-    --save_steps 500  \
-    --train_path ../trec_pm/train_open.jsonl  \
-    --per_device_train_batch_size 16  \
-    --learning_rate 1e-5  \
-    --q_max_len 32  \
-    --p_max_len 478  \
-    --num_train_epochs 10  \
-    --loss_fn bce  \
-    --logging_dir scibert_trec_log  \
-    --dataloader_num_workers 1 \
-    --seed 100
-# validation and test
-python eval_openmatch.py -t scibert_trec
-```
+To obtain the results of `BERT Re-Ranker` and `BERT Re-Ranker+`, see `bert_reranker.sh`.

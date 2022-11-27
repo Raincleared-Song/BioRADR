@@ -4,25 +4,10 @@ from .config_base import ConfigBase
 
 class ConfigDenoise(ConfigBase):
     data_path = {
-        'train': '../project-1/CTDRED/ctd_train.json',
-        'valid': '../project-1/CTDRED/ctd_dev.json',
-        'test': '../project-1/CTDRED/ctd_test.json'
+        'train': 'CTDRED/ctd_train.json',
+        'valid': 'CTDRED/ctd_dev.json',
+        'test': 'CTDRED/ctd_test.json'
     }
-    # data_path = {
-    #     'train': '../project-1/CTDRED/train_mixed_binary_pos.json',
-    #     'valid': '../project-1/CTDRED/dev_binary_pos.json',
-    #     'test': '../project-1/CTDRED/test_binary_pos.json'
-    # }
-    # data_path = {
-    #     'train': 'CTDRED/train_mixed.json',
-    #     'valid': 'CTDRED/dev.json',
-    #     'test': None  # determined by terminal args
-    # }
-    # data_path = {
-    #     'train': 'Chemprot/chemprot_train_sent_fr.json',
-    #     'valid': 'Chemprot/chemprot_dev_sent_fr.json',
-    #     'test': None  # determined by terminal args
-    # }
     batch_size = {
         'train': 1,
         'valid': 16,
@@ -34,29 +19,15 @@ class ConfigDenoise(ConfigBase):
         '../huggingface/scibert_scivocab_cased') else 'allenai/scibert_scivocab_cased'
     score_path = None
     token_padding = 1024  # token reserved for each document
-    # token_padding = 448  # token reserved for each document, cps
     entity_padding = {
         'train': 37,
         'valid': 37,
         'test': 37
     }
-    # entity_padding = {
-    #     'train': 42,
-    #     'valid': 42,
-    #     'test': 42
-    # }  # entity reserved for each document
-    # entity_padding = {
-    #     'train': 27,
-    #     'valid': 27,
-    #     'test': 27
-    # }  # entity reserved for each document
     mention_padding = 3  # mention reserved for each entity
-    # mention_padding = 1  # mention reserved for each entity, chemprot
     train_sample_limit = 32
     test_sample_limit = 324
-    # train_sample_limit = 40
-    # test_sample_limit = 162  # #chemical * #gene
-    do_validation = False
+    do_validation = True
     use_gpu = True
     gpu_device = 'cuda:0'
     hidden_size = 256
@@ -80,8 +51,8 @@ class ConfigDenoise(ConfigBase):
     assert entity_marker_type in ['mt', 'm', 't', 't-m', 'm*']
     test_step = 1
     model_path = 'checkpoint'
-    model_name = 'ctd_all_denoise_biodre_men_base_star_tpmk4'
-    model_class = 'DenoiseModel'
+    model_name = 'ctd_all_cotrain_bioradr'
+    model_class = 'CoTrainModel'
     fp16 = False
     lr_step_size = 1  # step_size
     lr_gamma = 1

@@ -16,6 +16,7 @@ class ConfigBase:
         'adamw': AdamW,
         'sgd': SGD
     }
+    rank_result_path = 'CTDRED/temp_range'
 
     label2id = {"NA": 0, "Pos": 1}
     id2label = ["NA", "Pos"]

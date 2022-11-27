@@ -13,13 +13,13 @@ class ConfigPretrain(ConfigBase):
         'test': None
     }
     score_path = {
-        'train': f'{ConfigBase.rank_result_path}/pretrain_mixed_score.npy',
-        'valid': f'{ConfigBase.rank_result_path}/dev_score.npy',
+        'train': f'rank_results/pretrain_mixed_score.npy',
+        'valid': f'rank_results/dev_score.npy',
         'test': None
     }
     title_path = {
-        'train': f'{ConfigBase.rank_result_path}/pretrain_mixed_title.json',
-        'valid': f'{ConfigBase.rank_result_path}/dev_title.json',
+        'train': f'rank_results/pretrain_mixed_title.json',
+        'valid': f'rank_results/dev_title.json',
         'test': None
     }
 

@@ -8,8 +8,9 @@ from .document_crop import document_crop, sentence_mention_crop
 
 
 use_cp: bool = False
-use_score = Config.score_path is not None and os.path.exists(Config.score_path['train']) \
-    and os.path.exists(Config.score_path['valid']) and os.path.exists(Config.score_path['test'])
+use_score = hasattr(Config, 'score_path') and Config.score_path is not None and \
+    os.path.exists(Config.score_path['train']) and os.path.exists(Config.score_path['valid']) \
+    and os.path.exists(Config.score_path['test'])
 # use_score = False
 if use_score:
     mode_to_scores = {

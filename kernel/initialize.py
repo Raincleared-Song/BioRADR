@@ -50,7 +50,7 @@ def init_args():
 
     arg_parser = argparse.ArgumentParser()
     arg_parser.add_argument('--task', '-t', help='denoise/pretrain/finetune',
-                            type=str, choices=['denoise', 'pretrain', 'finetune'], required=True)
+                            type=str, choices=['denoise', 'pretrain', 'finetune', 'cotrain'], required=True)
     # whether to valid is defined by the configuration
     arg_parser.add_argument('--mode', '-m', help='train/test',
                             type=str, choices=['train', 'test'], required=True)

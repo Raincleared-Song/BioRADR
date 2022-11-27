@@ -18,6 +18,7 @@ class DenoiseDataset(Dataset):
             self.total_len = 50 * config.batch_size[mode] * config.train_steps * config.dataset_multiplier
         else:
             self.total_len = 100 * config.batch_size[mode] * config.train_steps * config.dataset_multiplier
+        self.total_len = int(self.total_len)
 
     def __getitem__(self, item):
         doc1, doc2 = random.sample(self.data, 2)

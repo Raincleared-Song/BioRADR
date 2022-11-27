@@ -3,6 +3,7 @@ from .DenoiseModel import DenoiseModel
 from .PretrainModel import PretrainModel
 from .DocuNetFinetune import DocuNetFinetune
 from .DocuNetDenoise import DocuNetDenoise
+from .CoTrainModel import CoTrainModel
 
 name_to_model = {
     'DenoiseModel': DenoiseModel,
@@ -10,4 +11,5 @@ name_to_model = {
     'PretrainModel': PretrainModel,
     'DocuNetDenoise': DocuNetDenoise,
     'DocuNetFinetune': DocuNetFinetune,
+    'CoTrainModel': CoTrainModel,
 }

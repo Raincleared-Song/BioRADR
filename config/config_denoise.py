@@ -27,7 +27,7 @@ class ConfigDenoise(ConfigBase):
     mention_padding = 3  # mention reserved for each entity
     train_sample_limit = 32
     test_sample_limit = 324
-    do_validation = True
+    do_validation = False
     use_gpu = True
     gpu_device = 'cuda:0'
     hidden_size = 256
@@ -51,8 +51,8 @@ class ConfigDenoise(ConfigBase):
     assert entity_marker_type in ['mt', 'm', 't', 't-m', 'm*']
     test_step = 1
     model_path = 'checkpoint'
-    model_name = 'ctd_all_cotrain_bioradr'
-    model_class = 'CoTrainModel'
+    model_name = 'ctd_all_celoss_p16_n15_denoise_tpmk4_ag1'
+    model_class = 'DenoiseModel'
     fp16 = False
     lr_step_size = 1  # step_size
     lr_gamma = 1

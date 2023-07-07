@@ -15,9 +15,12 @@ class ConfigFineTune(ConfigBase):
     }
 
     reader_num = 4
-    bert_path = '../huggingface/scibert_scivocab_cased' if os.path.exists(
-        '../huggingface/scibert_scivocab_cased') else 'allenai/scibert_scivocab_cased'
-    token_padding = 1024  # token reserved for each document
+    if ConfigBase.model_type == 'bert':
+        bert_path = '../huggingface/scibert_scivocab_cased' if os.path.exists(
+            '../huggingface/scibert_scivocab_cased') else 'allenai/scibert_scivocab_cased'
+    else:
+        bert_path = 'decapoda-research/llama-7b-hf'
+    token_padding = 512  # token reserved for each document
     entity_padding = None  # entity reserved for each document
     mention_padding = 3  # mention reserved for each entity
     train_sample_limit = 270  # CTD_binary
@@ -31,7 +34,7 @@ class ConfigFineTune(ConfigBase):
     hidden_size = 256
 
     optimizer = 'adamw'
-    learning_rate = 1e-5  ### ATTENTION! 2e-5 for cdr, 4e-4 group default for DocuNet
+    learning_rate = 1e-4  ### ATTENTION! 2e-5 for cdr, 4e-4 group default for DocuNet
     weight_decay = 0
     adam_epsilon = 1e-6
     from_epoch = 0
@@ -48,7 +51,7 @@ class ConfigFineTune(ConfigBase):
     assert entity_marker_type in ['mt', 'm', 't', 't-m', 'm*']
     test_step = 1
     model_path = 'checkpoint'
-    model_name = 'ctd_pretrain_pre_sci_type'
+    model_name = 'ctd_pretrain_pre_sci_type_llama'
     model_class = 'FineTuneModel'
     fp16 = False
     lr_step_size = 1

@@ -1,6 +1,7 @@
 import torch
 import torch.nn as nn
-from transformers import BertModel
+from transformers import AutoModel
+from opendelta import LoraModel
 from .long_input import process_long_input
 from config import ConfigFineTune as Config
 from utils import eval_multi_label
@@ -17,7 +18,14 @@ class FineTuneModel(nn.Module):
         self.type_embed_size = Config.type_embed_size
         self.block_size = Config.bilinear_block_size
 
-        self.bert = BertModel.from_pretrained(Config.bert_path)
+        self.bert = AutoModel.from_pretrained(Config.bert_path)
+        if Config.model_type == 'llama':
+            # use LoRA
+            delta_model = LoraModel(
+                backbone_model=self.bert, modified_modules=["q_proj", "v_proj"],
+            )
+            delta_model.freeze_module(exclude=["deltas"], set_state_dict=True)
+            delta_model.log()
 
         if Config.use_group_bilinear:
             self.bilinear = nn.Linear(self.bert_hidden * self.block_size, self.rep_hidden)

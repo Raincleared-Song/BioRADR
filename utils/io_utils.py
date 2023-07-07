@@ -3,7 +3,7 @@ import numpy as np
 import torch
 import sys
 from config import ConfigBase
-from apex import amp
+# from apex import amp
 
 
 def load_json(path: str):
@@ -31,8 +31,8 @@ def save_model(path: str, model, optimizer, trained_epoch: int, global_step: int
         'trained_epoch': trained_epoch,
         'global_step': global_step
     }
-    if config.fp16:
-        ret['amp'] = amp.state_dict()
+    # if config.fp16:
+    #     ret['amp'] = amp.state_dict()
     try:
         torch.save(ret, path)
     except Exception as err:
@@ -77,3 +77,10 @@ def calculate_bound(x):
 
 def print_json(obj):
     print(json.dumps(obj, sort_keys=True, indent=4, separators=(', ', ': '), ensure_ascii=False))
+
+
+def get_unused_token(index: int):
+    if ConfigBase.model_type == 'bert':
+        return f'[unused{index}]'
+    else:
+        return f'<0x{index:02X}>'

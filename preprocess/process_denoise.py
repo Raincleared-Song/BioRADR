@@ -1,5 +1,6 @@
 import random
 import torch
+from utils import get_unused_token
 from config import ConfigDenoise as Config
 from .document_crop import document_crop, sentence_mention_crop
 
@@ -12,6 +13,16 @@ def process_denoise(data, mode: str):
         return process_denoise_test(data, mode)
     else:
         return process_denoise_train(data, mode)
+
+
+def type_convert(inp_type: str):
+    if Config.model_type == 'bert':
+        return inp_type
+    else:
+        return {
+            'chemical': '▁chemical',
+            'disease': '▁disease',
+        }[inp_type.lower()]
 
 
 def process_denoise_test(data, mode: str):
@@ -34,13 +45,13 @@ def process_denoise_test(data, mode: str):
             entities = doc['vertexSet']
             for i in range(entity_num):
                 for j in range(entity_num):
-                    if entities[i][0]['type'].lower().startswith('chemical') and \
-                            entities[j][0]['type'].lower().startswith('gene'):
+                    if 'chemical' in entities[i][0]['type'].lower() and \
+                            'gene' in entities[j][0]['type'].lower():
                         pairs.append((i, j))
         else:
             entities = doc['vertexSet']
             pairs = [(i, j) for i in range(entity_num) for j in range(entity_num) if
-                     entities[i][0]['type'] == 'Chemical' and entities[j][0]['type'] == 'Disease']
+                     'chemical' in entities[i][0]['type'].lower() and 'disease' in entities[j][0]['type'].lower()]
         pair_ids.append(pairs)
         head_ids.append([pair[0] for pair in pairs])
         tail_ids.append([pair[1] for pair in pairs])
@@ -59,10 +70,11 @@ def process_denoise_test(data, mode: str):
         sample_counts.append(len(head_id))
         head_id += [0] * (test_sample_limit - len(head_id))
         tail_id += [0] * (test_sample_limit - len(tail_id))
+    float_type = torch.FloatType if Config.model_type == 'bert' else torch.HalfTensor
 
     return {
         'documents': torch.LongTensor(documents),
-        'attn_mask': torch.FloatTensor(attn_masks),
+        'attn_mask': float_type(attn_masks),
         'word_pos': torch.LongTensor(word_positions),
         'head_ids': torch.LongTensor(head_ids),
         'tail_ids': torch.LongTensor(tail_ids),
@@ -81,17 +93,18 @@ def process_document(data, mode: str):
     entities = data['vertexSet']
     for i, mentions in enumerate(entities):
         for mention in mentions:
+            mention['type'] = type_convert(mention['type'])
             if Config.entity_marker_type not in ['t', 't-m']:
                 tmp: list = sentences[mention['sent_id']][mention['pos'][0]]
                 if Config.entity_marker_type == 'mt':
                     # both mention and type
                     sentences[mention['sent_id']][mention['pos'][0]] = \
-                        [f'[unused{(i << 1) + 1}]', mention['type'], '*'] + tmp
+                        [get_unused_token((i << 1) + 1), mention['type'], '*'] + tmp
                 elif Config.entity_marker_type == 'm*':
                     sentences[mention['sent_id']][mention['pos'][0]] = ['*'] + tmp
                 else:
                     # Config.entity_marker_type == 'm', only mention
-                    sentences[mention['sent_id']][mention['pos'][0]] = [f'[unused{(i << 1) + 1}]'] + tmp
+                    sentences[mention['sent_id']][mention['pos'][0]] = [get_unused_token((i << 1) + 1)] + tmp
             else:
                 # Config.entity_marker_type in ['t', 't-m'], blank all mention, only type
                 # t-m: type, *, [MASK]
@@ -99,22 +112,20 @@ def process_document(data, mode: str):
                     sentences[mention['sent_id']][pos] = []
                 if Config.entity_marker_type == 't':
                     sentences[mention['sent_id']][mention['pos'][0]] = \
-                        [f'[unused{(i << 1) + 1}]', mention['type'], '*', '[unused0]']
+                        [get_unused_token((i << 1) + 1), mention['type'], '*', get_unused_token(0)]
                 else:
                     assert Config.entity_marker_type == 't-m'
-                    # sentences[mention['sent_id']][mention['pos'][0]] = \
-                    #     [f'[unused1]', mention['type'], '*', '[unused0]']
                     sentences[mention['sent_id']][mention['pos'][0]] = \
-                        [mention['type'], '*', '[unused0]']
+                        [mention['type'], '*', get_unused_token(0)]
             if Config.entity_marker_type == 'm*':
                 sentences[mention['sent_id']][mention['pos'][1] - 1].append('*')
             elif Config.entity_marker_type != 't-m':
-                sentences[mention['sent_id']][mention['pos'][1] - 1].append(f'[unused{(i + 1) << 1}]')
+                sentences[mention['sent_id']][mention['pos'][1] - 1].append(get_unused_token((i + 1) << 1))
             else:
-                # sentences[mention['sent_id']][mention['pos'][1] - 1].append(f'[unused2]')
                 pass
 
-    word_position, document = [], ['[CLS]']
+    cls_token, sep_token, pad_token = Config.tokenizer.cls_token, Config.tokenizer.sep_token, Config.tokenizer.pad_token
+    word_position, document = [], [cls_token]
     for sent in sentences:
         word_position.append([])
         for word in sent:
@@ -124,11 +135,11 @@ def process_document(data, mode: str):
 
     # pad each document
     if len(document) < Config.token_padding:
-        document.append('[SEP]')
+        document.append(sep_token)
         attn_mask = [1] * len(document) + [0] * (Config.token_padding - len(document))
-        document += ['[PAD]'] * (Config.token_padding - len(document))
+        document += [pad_token] * (Config.token_padding - len(document))
     else:
-        document = document[:(Config.token_padding - 1)] + ['[SEP]']
+        document = document[:(Config.token_padding - 1)] + [sep_token]
         attn_mask = [1] * Config.token_padding
 
     positions = []
@@ -216,14 +227,15 @@ def process_denoise_train(data, mode: str):
         pad_len = entity_pad2 - len(cur_p)
         for _ in range(pad_len):
             cur_p.append([0] * Config.mention_padding)
+    float_type = torch.FloatType if Config.model_type == 'bert' else torch.HalfTensor
 
     return {
         'document1': torch.LongTensor(documents1),
         'document2': torch.LongTensor(documents2),
         'positions1': torch.LongTensor(positions1),
         'positions2': torch.LongTensor(positions2),
-        'attn_mask1': torch.FloatTensor(attn_mask1),
-        'attn_mask2': torch.FloatTensor(attn_mask2),
+        'attn_mask1': float_type(attn_mask1),
+        'attn_mask2': float_type(attn_mask2),
 
         'rd_head_ids1': torch.LongTensor(rd_head_ids1),
         'rd_head_ids2': torch.LongTensor(rd_head_ids2),
@@ -249,7 +261,7 @@ def get_pos_neg_pairs(data, ret_dict=False):
     entity_num = len(entities)
     positive_pairs = {(lab['h'], lab['t']): lab['r'] for lab in data['labels'] if lab['r'] != 'NA'}
     negative_pairs = [(i, j) for i in range(entity_num) for j in range(entity_num) if
-                      entities[i][0]['type'] == 'Chemical' and entities[j][0]['type'] == 'Disease'
+                      'chemical' in entities[i][0]['type'].lower() and 'disease' in entities[j][0]['type'].lower()
                       and (i, j) not in positive_pairs]
     while len(negative_pairs) < Config.negative_num:
         negative_pairs *= 2

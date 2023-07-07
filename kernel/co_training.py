@@ -3,7 +3,7 @@ import torch
 from torch.autograd import Variable
 from torch.nn.utils import clip_grad_norm_
 from timeit import default_timer as timer
-from apex import amp
+# from apex import amp
 from .testing import test
 from models import CoTrainModel
 from config import ConfigDenoise, ConfigFineTune
@@ -82,19 +82,19 @@ def co_train(finetune_config: ConfigFineTune, denoise_config: ConfigDenoise,
             total_loss += float(loss)
             loss /= train_steps
 
-            if denoise_config.fp16:
-                with amp.scale_loss(loss, optimizer) as scaled_loss:
-                    scaled_loss.backward()
-            else:
-                determine(False)
-                loss.backward()
-                determine(True)
+            # if denoise_config.fp16:
+            #     with amp.scale_loss(loss, optimizer) as scaled_loss:
+            #         scaled_loss.backward()
+            # else:
+            determine(False)
+            loss.backward()
+            determine(True)
 
             if step % train_steps == 0:
-                if denoise_config.fp16:
-                    clip_grad_norm_(amp.master_params(optimizer), 1.0)
-                else:
-                    clip_grad_norm_(model.parameters(), 1.0)
+                # if denoise_config.fp16:
+                #     clip_grad_norm_(amp.master_params(optimizer), 1.0)
+                # else:
+                clip_grad_norm_(model.parameters(), 1.0)
                 optimizer.step()
                 optimizer.zero_grad()
                 scheduler.step()

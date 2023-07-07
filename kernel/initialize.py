@@ -4,7 +4,7 @@ import torch
 import argparse
 import os
 import time
-from apex import amp
+# from apex import amp
 from preprocess import task_to_process
 from datasets import task_to_dataset
 from config import task_to_config, ConfigBase
@@ -138,7 +138,8 @@ def init_data(args):
 
 def init_models(args):
     config: ConfigBase = task_to_config[args.task]
-    model = name_to_model[config.model_class]()
+    dtype = torch.float if config.model_type == 'bert' else torch.half
+    model = name_to_model[config.model_class]().to(dtype=dtype)
     trained_epoch, global_step = -1, 0
     if config.use_gpu:
         torch.cuda.set_device(config.gpu_device)
@@ -164,11 +165,15 @@ def init_models(args):
     if args.checkpoint is None:
         if args.mode == 'test':
             raise RuntimeError('Test mode need a trained model!')
-        if config.fp16:
-            model, optimizer = amp.initialize(model, optimizer, opt_level='O2')
+        # if config.fp16:
+        #     model, optimizer = amp.initialize(model, optimizer, opt_level='O2')
     else:
         params = torch.load(args.checkpoint, map_location={f'cuda:{k}': config.gpu_device for k in range(8)})
-        model.load_state_dict(params['model'])
+        if config.model_type == 'bert':
+            model.load_state_dict(params['model'])
+        else:
+            err_msg = model.load_state_dict(params['model'], strict=False)
+            assert len(err_msg.unexpected_keys) == 0 and all('lora' not in key for key in err_msg.missing_keys)
         if args.mode == 'train':
             trained_epoch = params['trained_epoch']
             # if config.optimizer == params['optimizer_name']:
@@ -176,10 +181,10 @@ def init_models(args):
             if 'global_step' in params:
                 global_step = params['global_step']
 
-        if config.fp16:
-            model, optimizer = amp.initialize(model, optimizer, opt_level='O2')
-            if 'amp' in params:
-                amp.load_state_dict(params['amp'])
+        # if config.fp16:
+        #     model, optimizer = amp.initialize(model, optimizer, opt_level='O2')
+        #     if 'amp' in params:
+        #         amp.load_state_dict(params['amp'])
     return {
         'model': model,
         'optimizer': optimizer,

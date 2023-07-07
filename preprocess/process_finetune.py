@@ -2,7 +2,7 @@ import numpy as np
 import random
 import os
 import torch
-from utils import load_json, sigmoid
+from utils import load_json, sigmoid, get_unused_token
 from config import ConfigFineTune as Config
 from .document_crop import document_crop, sentence_mention_crop
 
@@ -67,6 +67,7 @@ def process_finetune(data, mode: str):
         tail_p += [[0] * Config.mention_padding] * (sample_limit - len(tail_p))
         typ += [('', '')] * (sample_limit - len(typ))
     labels = np.array(labels)
+    float_type = torch.FloatType if Config.model_type == 'bert' else torch.HalfTensor
 
     return {
         'documents': torch.LongTensor(documents),
@@ -74,7 +75,7 @@ def process_finetune(data, mode: str):
         'head_pos': torch.LongTensor(head_poses),
         'tail_pos': torch.LongTensor(tail_poses),
         'label_mask': torch.LongTensor(label_masks),
-        'attn_mask': torch.FloatTensor(attn_masks),
+        'attn_mask': float_type(attn_masks),
         'pair_ids': pairs_list,
         'titles': titles,
         'sample_counts': sample_counts,
@@ -82,6 +83,16 @@ def process_finetune(data, mode: str):
         'real_idx': real_list,
         'word_pos': positions,
     }
+
+
+def type_convert(inp_type: str):
+    if Config.model_type == 'bert':
+        return inp_type
+    else:
+        return {
+            'chemical': '▁chemical',
+            'disease': '▁disease',
+        }[inp_type.lower()]
 
 
 def process_single(data, mode: str, extra=None):
@@ -111,8 +122,8 @@ def process_single(data, mode: str, extra=None):
             for j in range(entity_num):
                 if i == j:
                     continue
-                if use_cp and not (entities[i][0]['type'].lower().startswith('chemical') and
-                                   entities[j][0]['type'].lower().startswith('gene')):
+                if use_cp and not ('chemical' in entities[i][0]['type'].lower() and
+                                   'gene' in entities[j][0]['type'].lower()):
                     continue
                 pair_scores.append(((i, j), scores[len(pair_scores)]))
         pair_scores.sort(reverse=True, key=lambda x: x[1])
@@ -136,37 +147,39 @@ def process_single(data, mode: str, extra=None):
 
         for i, eid in enumerate(entity_set):
             for mention in entities[eid]:
+                mention['type'] = type_convert(mention['type'])
                 if Config.entity_marker_type != 't':
                     tmp: list = sentences[mention['sent_id']][mention['pos'][0]]
                     if Config.entity_marker_type == 'mt':
                         # both mention and type
                         sentences[mention['sent_id']][mention['pos'][0]] = \
-                            [f'[unused{(i << 1) + 1}]', mention['type'], '*'] + tmp
+                            [get_unused_token((i << 1) + 1), mention['type'], '*'] + tmp
                     else:
                         # Config.entity_marker_type == 'm', only mention
-                        sentences[mention['sent_id']][mention['pos'][0]] = [f'[unused{(i << 1) + 1}]'] + tmp
+                        sentences[mention['sent_id']][mention['pos'][0]] = [get_unused_token((i << 1) + 1)] + tmp
                 else:
                     # Config.entity_marker_type == 't', blank all mention, only type
                     for pos in range(mention['pos'][0], mention['pos'][1]):
                         sentences[mention['sent_id']][pos] = []
                     sentences[mention['sent_id']][mention['pos'][0]] = \
-                        [f'[unused{(i << 1) + 1}]', mention['type'], '*', '[unused0]']
-                sentences[mention['sent_id']][mention['pos'][1] - 1].append(f'[unused{(i + 1) << 1}]')
+                        [get_unused_token((i << 1) + 1), mention['type'], '*', get_unused_token(0)]
+                sentences[mention['sent_id']][mention['pos'][1] - 1].append(get_unused_token((i + 1) << 1))
 
     else:
         for i, mentions in enumerate(entities):
             for mention in mentions:
+                mention['type'] = type_convert(mention['type'])
                 if Config.entity_marker_type not in ['t', 't-m']:
                     tmp: list = sentences[mention['sent_id']][mention['pos'][0]]
                     if Config.entity_marker_type == 'mt':
                         # both mention and type
                         sentences[mention['sent_id']][mention['pos'][0]] = \
-                            [f'[unused{(i << 1) + 1}]', mention['type'], '*'] + tmp
+                            [get_unused_token((i << 1) + 1), mention['type'], '*'] + tmp
                     elif Config.entity_marker_type == 'm*':
                         sentences[mention['sent_id']][mention['pos'][0]] = ['*'] + tmp
                     else:
                         # Config.entity_marker_type == 'm', only mention
-                        sentences[mention['sent_id']][mention['pos'][0]] = [f'[unused{(i << 1) + 1}]'] + tmp
+                        sentences[mention['sent_id']][mention['pos'][0]] = [get_unused_token((i << 1) + 1)] + tmp
                 else:
                     # Config.entity_marker_type in ['t', 't-m'], blank all mention, only type
                     # t-m: type, *, [MASK]
@@ -174,22 +187,20 @@ def process_single(data, mode: str, extra=None):
                         sentences[mention['sent_id']][pos] = []
                     if Config.entity_marker_type == 't':
                         sentences[mention['sent_id']][mention['pos'][0]] = \
-                            [f'[unused{(i << 1) + 1}]', mention['type'], '*', '[unused0]']
+                            [get_unused_token((i << 1) + 1), mention['type'], '*', get_unused_token(0)]
                     else:
                         assert Config.entity_marker_type == 't-m'
-                        # sentences[mention['sent_id']][mention['pos'][0]] = \
-                        #     [f'[unused1]', mention['type'], '*', '[unused0]']
                         sentences[mention['sent_id']][mention['pos'][0]] = \
-                            [mention['type'], '*', '[unused0]']
+                            [mention['type'], '*', get_unused_token(0)]
                 if Config.entity_marker_type == 'm*':
                     sentences[mention['sent_id']][mention['pos'][1] - 1].append('*')
                 elif Config.entity_marker_type != 't-m':
-                    sentences[mention['sent_id']][mention['pos'][1] - 1].append(f'[unused{(i + 1) << 1}]')
+                    sentences[mention['sent_id']][mention['pos'][1] - 1].append(get_unused_token((i + 1) << 1))
                 else:
-                    # sentences[mention['sent_id']][mention['pos'][1] - 1].append(f'[unused2]')
                     pass
 
-    word_position, document = [], ['[CLS]']
+    cls_token, sep_token, pad_token = Config.tokenizer.cls_token, Config.tokenizer.sep_token, Config.tokenizer.pad_token
+    word_position, document = [], [cls_token]
     for sent in sentences:
         word_position.append([])
         for word in sent:
@@ -199,11 +210,11 @@ def process_single(data, mode: str, extra=None):
 
     # pad each document
     if len(document) < Config.token_padding:
-        document.append('[SEP]')
+        document.append(sep_token)
         attn_mask = [1] * len(document) + [0] * (Config.token_padding - len(document))
-        document += ['[PAD]'] * (Config.token_padding - len(document))
+        document += [pad_token] * (Config.token_padding - len(document))
     else:
-        document = document[:(Config.token_padding - 1)] + ['[SEP]']
+        document = document[:(Config.token_padding - 1)] + [sep_token]
         attn_mask = [1] * Config.token_padding
 
     positions = []
@@ -235,16 +246,16 @@ def process_single(data, mode: str, extra=None):
         negative_pairs = []
         for i in range(entity_num):
             for j in range(entity_num):
-                if entities[i][0]['type'].lower().startswith('chemical') and \
-                        entities[j][0]['type'].lower().startswith('gene') and (i, j) not in positive_pairs:
+                if 'chemical' in entities[i][0]['type'].lower() and \
+                        'gene' in entities[j][0]['type'].lower() and (i, j) not in positive_pairs:
                     negative_pairs.append((i, j))
     else:
         negative_pairs = []
         if Config.only_chem_disease:
             for i in range(entity_num):
                 for j in range(entity_num):
-                    if entities[i][0]['type'].lower().startswith('chemical') and \
-                            entities[j][0]['type'].lower().startswith('disease') and (i, j) not in positive_pairs:
+                    if 'chemical' in entities[i][0]['type'].lower() and \
+                            'disease' in entities[j][0]['type'].lower() and (i, j) not in positive_pairs:
                         negative_pairs.append((i, j))
         else:
             negative_pairs = [(i, j) for i in range(entity_num) for j in range(entity_num) if i != j
@@ -277,8 +288,8 @@ def process_single(data, mode: str, extra=None):
                 should_have_sample_cnt = 0
                 for i in range(entity_num):
                     for j in range(entity_num):
-                        if entities[i][0]['type'].lower().startswith('chemical') and \
-                                entities[j][0]['type'].lower().startswith('disease'):
+                        if 'chemical' in entities[i][0]['type'].lower() and \
+                                'disease' in entities[j][0]['type'].lower():
                             should_have_sample_cnt += 1
             assert len(samples) == should_have_sample_cnt
         except AssertionError as err:

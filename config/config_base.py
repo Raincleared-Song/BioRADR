@@ -5,10 +5,23 @@ from transformers.optimization import AdamW
 
 
 class ConfigBase:
-    tokenizer = AutoTokenizer.from_pretrained('../huggingface/scibert_scivocab_cased' if os.path.exists(
-        '../huggingface/scibert_scivocab_cased') else 'allenai/scibert_scivocab_cased')
+    model_type = 'llama'
+    assert model_type in ['bert', 'llama']
+    if model_type == 'bert':
+        tokenizer = AutoTokenizer.from_pretrained('../huggingface/scibert_scivocab_cased' if os.path.exists(
+            '../huggingface/scibert_scivocab_cased') else 'allenai/scibert_scivocab_cased')
+        tokenizer.add_special_tokens({"additional_special_tokens": [f"[unused{idx}]" for idx in range(100)]})
+    else:
+        tokenizer = AutoTokenizer.from_pretrained('decapoda-research/llama-7b-hf')
+        tokenizer.unk_token, tokenizer.unk_token_id = '<unk>', 0
+        tokenizer.pad_token, tokenizer.pad_token_id = '<unk>', 0
+        tokenizer.bos_token, tokenizer.eos_token, tokenizer.mask_token = '<s>', '</s>', '<0xFF>'
+        tokenizer.cls_token, tokenizer.sep_token = '<s>', '</s>'
+        tokenizer.padding_side = 'right'
+        tokenizer.add_special_tokens(
+            {"additional_special_tokens": ['<s>', '</s>', '<unk>'] + [f'<0x{idx:02X}>' for idx in range(0x100)]})
     relation_num = 2
-    bert_hidden = 768
+    bert_hidden = 4096
     valid_instance_cnt = 20683  # ctd_all
     optimizer_dict = {
         'adam': Adam,

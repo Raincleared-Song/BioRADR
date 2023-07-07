@@ -66,9 +66,7 @@ def sentence_mention_crop(doc, mode: str, option: int):
         pos_t = set([mention['sent_id'] for mention in entities[t]])
         cur_intersect = pos_h & pos_t
         in_len = len(cur_intersect)
-        # 会影响 labels 中的其他实体对，怎么办？
-        # 一种解决方法是两两推断，但那样完全放弃了 multi-hop，而且测试的时候效率较低
-        # 训练的时候多 option3 mask，测试时两个两个过？
+
         if (option == 1 and in_len == 1 or option == 2 and in_len > 0) and (len(pos_h) > in_len or len(pos_t) > in_len):
             # mask all the other mentions
             new_mention_h, new_mention_t = [], []

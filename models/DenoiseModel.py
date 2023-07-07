@@ -2,7 +2,8 @@ import torch
 import torch.nn as nn
 from .long_input import process_long_input
 from config import ConfigDenoise as Config
-from transformers import BertModel
+from transformers import AutoModel
+from opendelta import LoraModel
 from utils import eval_softmax
 from .ATLoss import BinaryATLoss
 from .ContrastiveLoss import ContrastiveLoss
@@ -27,7 +28,15 @@ class DenoiseModel(nn.Module):
         self.bert_hidden = Config.bert_hidden
         self.block_size = Config.block_size
 
-        self.bert = BertModel.from_pretrained(Config.bert_path)
+        self.bert = AutoModel.from_pretrained(Config.bert_path)
+        if Config.model_type == 'llama':
+            # use LoRA
+            delta_model = LoraModel(
+                backbone_model=self.bert, modified_modules=["q_proj", "v_proj"],
+            )
+            delta_model.freeze_module(exclude=["deltas"], set_state_dict=True)
+            delta_model.log()
+
         if Config.use_group_bilinear:
             self.bilinear = nn.Linear(self.bert_hidden * self.block_size, self.rep_hidden)
         else:

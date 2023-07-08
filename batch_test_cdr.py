@@ -3,6 +3,7 @@ import json
 import argparse
 import subprocess
 import numpy as np
+from config import ConfigFineTune as Config
 
 
 def calculate_bound(x):
@@ -88,4 +89,5 @@ if __name__ == '__main__':
     arg_parser = argparse.ArgumentParser()
     arg_parser.add_argument('--task', '-t', help='the model name', type=str, required=True)
     args = arg_parser.parse_args()
+    assert Config.model_name == args.task
     test_cdr_model(args.task)

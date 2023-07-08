@@ -2,7 +2,7 @@ import os
 import shutil
 import torch
 from config import ConfigFineTune as Config
-from kernel import init_all, train, test, rank
+from kernel import init_all, init_args, train, test, rank
 
 
 def inspect(task_: str, mode_='valid'):
@@ -47,8 +47,9 @@ def inspect(task_: str, mode_='valid'):
 
 
 if __name__ == '__main__':
+    args = init_args()
     # repeated experiments for cdr5
-    is_cdr = False
+    is_cdr = args.task == 'finetune' and args.mode == 'train' and 'CDR' in Config.data_path['train']
     if is_cdr:
         task_path = Config.model_name
 
@@ -57,6 +58,7 @@ if __name__ == '__main__':
         target_path = f'checkpoint/{task_path}/model_all'
         os.makedirs(target_path, exist_ok=True)
         for it in range(5):
+            torch.cuda.empty_cache()
             print(f'epoch {it} for {task_path} ......')
             config, models, datasets, task, mode = init_all(seeds[it])
             train(config, models, datasets, it)
@@ -66,6 +68,10 @@ if __name__ == '__main__':
             print(f'{model_path}/{m_key}.pkl', f'{target_path}/{it}-{m_key}.pkl')
             shutil.copy(f'{model_path}/{m_key}.pkl', f'{target_path}/{it}-{m_key}.pkl')
             os.system(f'rm -rf {model_path}/*')
+
+            del config, models, datasets, task, mode
+            import torch
+            torch.cuda.empty_cache()
         exit()
 
     # normal setting

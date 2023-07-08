@@ -4,9 +4,12 @@ from .config_base import ConfigBase
 
 class ConfigFineTune(ConfigBase):
     data_path = {
-        'train': 'CTDRED/ctd_train.json',
-        'valid': 'CTDRED/ctd_dev.json',
-        'test': 'CTDRED/ctd_test.json'
+        # 'train': 'CTDRED/ctd_train.json',
+        # 'valid': 'CTDRED/ctd_dev.json',
+        # 'test': 'CTDRED/ctd_test.json'
+        'train': 'CDR/train_cdr.json',
+        'valid': 'CDR/dev_cdr.json',
+        'test': 'CDR/test_cdr.json'
     }
     batch_size = {
         'train': 4,
@@ -23,9 +26,11 @@ class ConfigFineTune(ConfigBase):
     token_padding = 512  # token reserved for each document
     entity_padding = None  # entity reserved for each document
     mention_padding = 3  # mention reserved for each entity
-    train_sample_limit = 270  # CTD_binary
+    train_sample_limit = 104  # cdr
+    # train_sample_limit = 270  # CTD_binary
     train_sample_number = 60  # cdr_cdr_neg_sample
-    test_sample_limit = 294  # CTD_binary
+    test_sample_limit = 117  # cdr
+    # test_sample_limit = 294  # CTD_binary
     score_sample_limit = 50
     kept_pair_num = 50
     do_validation = True
@@ -34,12 +39,14 @@ class ConfigFineTune(ConfigBase):
     hidden_size = 256
 
     optimizer = 'adamw'
-    learning_rate = 1e-4  ### ATTENTION! 2e-5 for cdr, 4e-4 group default for DocuNet
-    weight_decay = 0
-    adam_epsilon = 1e-6
+    learning_rate = 2e-5  ### ATTENTION! 2e-5 for cdr, 4e-4 group default for DocuNet
+    weight_decay = 0.01
+    adam_epsilon = 1e-4
     from_epoch = 0
-    epoch_num = 30
-    real_epoch_num = 1
+    # epoch_num = 30
+    # real_epoch_num = 5
+    epoch_num = 40
+    real_epoch_num = 40
     warmup_ratio = 0.06
 
     output_step = 1
@@ -51,7 +58,8 @@ class ConfigFineTune(ConfigBase):
     assert entity_marker_type in ['mt', 'm', 't', 't-m', 'm*']
     test_step = 1
     model_path = 'checkpoint'
-    model_name = 'ctd_pretrain_pre_sci_type_llama'
+    model_name = 'cdr_finetune_pre_sci_type_biodre_llama'
+    # model_name = 'ctd_pretrain_pre_sci_type_llama'
     model_class = 'FineTuneModel'
     fp16 = False
     lr_step_size = 1

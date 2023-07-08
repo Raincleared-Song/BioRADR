@@ -26,6 +26,7 @@ def init_all(seed=None):
 def save_config(args):
     config_list = os.listdir('config')
     cur_config = task_to_config[args.task]
+    cur_config.gpu_device = args.device
     time_str = '-'.join(time.asctime(time.localtime(time.time())).split(' '))
     base_path = os.path.join(cur_config.model_path, cur_config.model_name)
     os.makedirs(base_path, exist_ok=True)
@@ -57,6 +58,7 @@ def init_args():
     arg_parser.add_argument('--checkpoint', '-c', help='path of the checkpoint file', default=None)
     arg_parser.add_argument('--rank_file', '-rf', help='the file to rank', default=None)
     arg_parser.add_argument('--pretrain_bert', '-pb', help='the pretrain model path', default=None)
+    arg_parser.add_argument('--device', '-d', help='the device to use', default='cuda:0')
     return arg_parser.parse_args()
 
 
@@ -160,7 +162,8 @@ def init_models(args):
             {"params": [p for n, p in model.named_parameters() if
                         not any(nd in n for nd in extract_layer + bert_layer)]},
         ]
-        optimizer = AdamW(optimizer_grouped_parameters, lr=config.learning_rate, eps=config.adam_epsilon)
+        optimizer = AdamW(optimizer_grouped_parameters, lr=config.learning_rate,
+                          weight_decay=config.weight_decay, eps=config.adam_epsilon)
 
     if args.checkpoint is None:
         if args.mode == 'test':

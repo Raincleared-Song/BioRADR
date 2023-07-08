@@ -22,8 +22,8 @@ class ConfigBase:
             {"additional_special_tokens": ['<s>', '</s>', '<unk>'] + [f'<0x{idx:02X}>' for idx in range(0x100)]})
     relation_num = 2
     bert_hidden = 4096
-    valid_instance_cnt = 997  # cdr
-    # valid_instance_cnt = 20683  # ctd_all
+    # valid_instance_cnt = 997  # cdr
+    valid_instance_cnt = 20683  # ctd_all
     optimizer_dict = {
         'adam': Adam,
         'adamw': AdamW,

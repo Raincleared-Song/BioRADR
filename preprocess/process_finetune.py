@@ -2,7 +2,7 @@ import numpy as np
 import random
 import os
 import torch
-from utils import load_json, sigmoid, get_unused_token
+from utils import load_json, sigmoid, get_unused_token, type_convert
 from config import ConfigFineTune as Config
 from .document_crop import document_crop, sentence_mention_crop
 
@@ -83,16 +83,6 @@ def process_finetune(data, mode: str):
         'real_idx': real_list,
         'word_pos': positions,
     }
-
-
-def type_convert(inp_type: str):
-    if Config.model_type == 'bert':
-        return inp_type
-    else:
-        return {
-            'chemical': '▁chemical',
-            'disease': '▁disease',
-        }[inp_type.lower()]
 
 
 def process_single(data, mode: str, extra=None):

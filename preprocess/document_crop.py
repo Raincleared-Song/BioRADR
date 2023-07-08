@@ -26,7 +26,7 @@ def document_crop(doc):
 def test_cp_negative(item: dict):
     num_c, num_g = 0, 0
     for entity in item['vertexSet']:
-        if entity[0]['type'].lower().startswith('chemical'):
+        if 'chemical' in entity[0]['type'].lower():
             num_c += 1
         else:
             num_g += 1
@@ -52,7 +52,7 @@ def sentence_mention_crop(doc, mode: str, option: int):
         doc_labels = []
         for i in range(entity_num):
             for j in range(entity_num):
-                if entities[i][0]['type'].lower() == 'chemical' and entities[j][0]['type'].lower() == 'disease':
+                if 'chemical' in entities[i][0]['type'].lower() and 'disease' in entities[j][0]['type'].lower():
                     doc_labels.append({'h': i, 't': j})
     else:
         doc_labels = doc['labels']
@@ -61,7 +61,7 @@ def sentence_mention_crop(doc, mode: str, option: int):
     reserve_mentions = None
     for lab in doc_labels:
         h, t = lab['h'], lab['t']
-        assert entities[h][0]['type'] == 'Chemical' and entities[t][0]['type'] == 'Disease'
+        assert 'chemical' in entities[h][0]['type'].lower() and 'disease' in entities[t][0]['type'].lower()
         pos_h = set([mention['sent_id'] for mention in entities[h]])
         pos_t = set([mention['sent_id'] for mention in entities[t]])
         cur_intersect = pos_h & pos_t

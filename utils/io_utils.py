@@ -84,3 +84,15 @@ def get_unused_token(index: int):
         return f'[unused{index}]'
     else:
         return f'<0x{index:02X}>'
+
+
+def type_convert(inp_type: str):
+    if ConfigBase.model_type == 'bert':
+        return inp_type
+    else:
+        return {
+            'chemical': '▁chemical',
+            '▁chemical': '▁chemical',
+            'disease': '▁disease',
+            '▁disease': '▁disease',
+        }[inp_type.lower()]

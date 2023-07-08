@@ -15,8 +15,11 @@ class ConfigDenoise(ConfigBase):
     }
 
     reader_num = 4
-    bert_path = '../huggingface/scibert_scivocab_cased' if os.path.exists(
-        '../huggingface/scibert_scivocab_cased') else 'allenai/scibert_scivocab_cased'
+    if ConfigBase.model_type == 'bert':
+        bert_path = '../huggingface/scibert_scivocab_cased' if os.path.exists(
+            '../huggingface/scibert_scivocab_cased') else 'allenai/scibert_scivocab_cased'
+    else:
+        bert_path = 'decapoda-research/llama-7b-hf'
     score_path = None
     token_padding = 1024  # token reserved for each document
     entity_padding = {
@@ -34,9 +37,9 @@ class ConfigDenoise(ConfigBase):
     block_size = 64
 
     optimizer = 'adamw'
-    learning_rate = 1e-5
-    weight_decay = 0
-    adam_epsilon = 1e-6
+    learning_rate = 2e-5
+    weight_decay = 0.01
+    adam_epsilon = 1e-4
     warmup_ratio = 0.06
 
     from_epoch = 0
@@ -51,7 +54,7 @@ class ConfigDenoise(ConfigBase):
     assert entity_marker_type in ['mt', 'm', 't', 't-m', 'm*']
     test_step = 1
     model_path = 'checkpoint'
-    model_name = 'ctd_all_celoss_p16_n15_denoise_tpmk4_ag1'
+    model_name = 'ctd_all_denoise_biodre_men_base_star_tpmk4_llama'
     model_class = 'DenoiseModel'
     fp16 = False
     lr_step_size = 1  # step_size
